@@ -220,6 +220,7 @@ describe('a school runs a term end to end', () => {
       const client = new Client({ connectionString: process.env.DATABASE_URL });
       await client.connect();
       try {
+        await client.query('set role school_app');
         const res = await client.query('select count(*)::int as n from students');
         expect(res.rows[0].n).toBe(0);
       } finally {

@@ -11,7 +11,7 @@ This first slice covers the part schools feel every term: **setting up the schoo
 - **Students**: add one at a time, or import a class from a spreadsheet saved as CSV (safe to re-upload).
 - **Score entry**: a score sheet per class and subject. Teachers can only enter scores for subjects they are assigned to.
 - **Results**: class broadsheet with totals, averages and positions (ties share a position), and a report card per student with grades, subject positions, class statistics and teacher and head comments.
-- **Tenant isolation**: every school's data is separated by Postgres row-level security, tested end to end.
+- **Tenant isolation**: every school's data is separated by Postgres row-level security, tested end to end. The API switches to a restricted `school_app` role inside each school's transaction, so isolation holds even if it connects as a superuser. The role that runs migrations needs `CREATEROLE` (or superuser) the first time, to create `school_app`.
 
 ## Layout
 

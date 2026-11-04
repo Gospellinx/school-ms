@@ -1,9 +1,9 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import bcrypt from 'bcryptjs';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { DbService } from '../db/db.service';
+import { DbService, scopeToSchool } from '../db/db.service';
 import { schools, sections, staff } from '../db/schema';
 import { rethrowUnique } from '../common/validation';
 import { DEFAULT_SECTIONS } from '../setup/defaults';
@@ -48,7 +48,7 @@ export class AuthService {
     try {
       return await this.dbs.db.transaction(async (tx) => {
         const [school] = await tx.insert(schools).values(input.school).returning();
-        await tx.execute(sql`select set_config('app.school_id', ${school.id}, true)`);
+        await scopeToSchool(tx, school.id);
         await tx.insert(sections).values(DEFAULT_SECTIONS.map((s) => ({ ...s, schoolId: school.id })));
         const [owner] = await tx
           .insert(staff)
