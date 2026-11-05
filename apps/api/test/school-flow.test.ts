@@ -24,7 +24,7 @@ async function registerSchool(slug: string) {
 
 beforeAll(async () => {
   const mod = await Test.createTestingModule({ imports: [AppModule] }).compile();
-  app = mod.createNestApplication();
+  app = mod.createNestApplication({ rawBody: true });
   app.setGlobalPrefix('api');
   await app.init();
   http = request(app.getHttpServer());
@@ -103,7 +103,7 @@ describe('a school runs a term end to end', () => {
       'GC/003,Chidi,Eze,,male,2010-12-25',
     ].join('\r\n');
     const first = await http.post('/api/students/import').set(auth(ctx.owner)).send({ classId: ctx.class, csv }).expect(201);
-    expect(first.body).toEqual({ imported: 3, errors: [] });
+    expect(first.body).toEqual({ imported: 3, parentsLinked: 0, errors: [] });
     await http.post('/api/students/import').set(auth(ctx.owner)).send({ classId: ctx.class, csv }).expect(201);
     const list = (await http.get(`/api/students?classId=${ctx.class}`).set(auth(ctx.owner)).expect(200)).body;
     expect(list).toHaveLength(3);
