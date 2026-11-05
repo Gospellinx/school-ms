@@ -91,6 +91,13 @@ describe('a school runs a term end to end', () => {
     ).body.token;
   });
 
+  it('lists only a teacher’s own class subjects, and all of them for leadership', async () => {
+    const mine = (await http.get('/api/my-assignments').set(auth(ctx.teacher)).expect(200)).body;
+    expect(mine.map((a: { subjectName: string }) => a.subjectName)).toEqual(['Mathematics']);
+    const all = (await http.get('/api/my-assignments').set(auth(ctx.owner)).expect(200)).body;
+    expect(all.map((a: { subjectName: string }) => a.subjectName)).toEqual(['English Language', 'Mathematics']);
+  });
+
   it('stops teachers from doing setup', async () => {
     await http.post('/api/subjects').set(auth(ctx.teacher)).send({ name: 'Biology', code: 'BIO' }).expect(403);
   });

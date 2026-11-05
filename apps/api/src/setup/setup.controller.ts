@@ -199,6 +199,27 @@ export class SetupController {
     });
   }
 
+  /** Class and subject pairs this person can enter scores for: their own as a teacher, all of them for leadership. */
+  @Get('my-assignments')
+  myAssignments(@CurrentUser() u: Principal) {
+    return this.dbs.withSchool(u.schoolId, (tx) =>
+      tx
+        .select({
+          classId: classes.id,
+          className: classes.name,
+          arm: classes.arm,
+          subjectId: subjects.id,
+          subjectName: subjects.name,
+          teacherId: classSubjects.teacherId,
+        })
+        .from(classSubjects)
+        .innerJoin(classes, eq(classes.id, classSubjects.classId))
+        .innerJoin(subjects, eq(subjects.id, classSubjects.subjectId))
+        .where(u.role === 'teacher' ? eq(classSubjects.teacherId, u.staffId) : undefined)
+        .orderBy(asc(classes.sortOrder), asc(classes.name), asc(classes.arm), asc(subjects.name)),
+    );
+  }
+
   @Roles(...LEADERSHIP)
   @Get('staff')
   listStaff(@CurrentUser() u: Principal) {
