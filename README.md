@@ -13,9 +13,12 @@ This first slice covers the part schools feel every term: **setting up the schoo
 - **Results**: class broadsheet with totals, averages and positions (ties share a position), and a report card per student with grades, subject positions, class statistics and teacher and head comments.
 - **Tenant isolation**: every school's data is separated by Postgres row-level security, tested end to end. The API switches to a restricted `school_app` role inside each school's transaction, so isolation holds even if it connects as a superuser. The role that runs migrations needs `CREATEROLE` (or superuser) the first time, to create `school_app`.
 
+- **Web app** for staff: sign in or register a school, a setup checklist, sessions and terms, classes with subjects and teachers, staff accounts, student import from CSV, a score entry grid that checks scores as you type, the class broadsheet, and report cards that print or save as A4 PDF from the browser. Teachers only see their own class subjects. Works on phones.
+
 ## Layout
 
 ```
+apps/web        Next.js staff web app; talks to the API through its own /bff proxy so the login token stays in an httpOnly cookie
 apps/api        NestJS API (REST), Drizzle ORM, PostgreSQL
 packages/core   Pure TypeScript logic: grading scales, totals, ranking, class results
 ```
@@ -31,6 +34,7 @@ cp apps/api/.env.example apps/api/.env
 pnpm db:migrate                 # creates tables and row-level security policies
 pnpm db:seed                    # demo school: gcis-demo / proprietor@demo.test / demo-password
 pnpm dev:api                    # http://localhost:3001/api
+pnpm dev:web                    # http://localhost:3000 (set API_URL if the API is elsewhere)
 ```
 
 Tests need a separate database (`schoolms_test`, wiped on every run):
@@ -64,7 +68,6 @@ All routes are under `/api` and need `Authorization: Bearer <token>` except sign
 
 ## Next
 
-1. Web app: school dashboard, score entry grid, printable report cards (PDF).
-2. AI-drafted report card comments.
-3. Parent access to results, and fee collection through Paystack.
-4. Question bank and CBT tests for every class, with AI explanations.
+1. AI-drafted report card comments, and printing a whole class's report cards at once.
+2. Parent access to results, and fee collection through Paystack.
+3. Question bank and CBT tests for every class, with AI explanations.

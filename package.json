@@ -9,7 +9,8 @@
     "typecheck": "pnpm -r typecheck",
     "dev:api": "pnpm --filter @school-ms/api dev",
     "db:migrate": "pnpm --filter @school-ms/api db:migrate",
-    "db:seed": "pnpm --filter @school-ms/api db:seed"
+    "db:seed": "pnpm --filter @school-ms/api db:seed",
+    "dev:web": "pnpm --filter @school-ms/web dev"
   },
   "devDependencies": {
     "@types/node": "22.10.2",
