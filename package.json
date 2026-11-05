@@ -8,6 +8,7 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "dev:api": "pnpm --filter @school-ms/api dev",
+    "dev:web": "pnpm --filter @school-ms/web dev",
     "db:migrate": "pnpm --filter @school-ms/api db:migrate",
     "db:seed": "pnpm --filter @school-ms/api db:seed"
   },
