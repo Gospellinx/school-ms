@@ -1,8 +1,8 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { Principal, Role } from './auth.types';
-import { PUBLIC_KEY, ROLES_KEY } from './decorators';
+import { Audience, Role, TokenRole } from './auth.types';
+import { AUDIENCE_KEY, PUBLIC_KEY, ROLES_KEY } from './decorators';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -18,15 +18,25 @@ export class AuthGuard implements CanActivate {
     const req = ctx.switchToHttp().getRequest();
     const [scheme, token] = (req.headers.authorization ?? '').split(' ');
     if (scheme !== 'Bearer' || !token) throw new UnauthorizedException();
+    let payload: { sub: string; school: string; role: TokenRole };
     try {
-      const payload = await this.jwt.verifyAsync<{ sub: string; school: string; role: Role }>(token);
-      req.user = { staffId: payload.sub, schoolId: payload.school, role: payload.role } satisfies Principal;
+      payload = await this.jwt.verifyAsync(token);
     } catch {
       throw new UnauthorizedException();
     }
 
+    const audience: Audience = payload.role === 'parent' ? 'parent' : payload.role === 'student' ? 'student' : 'staff';
+    const allowed = this.reflector.getAllAndOverride<Audience[] | undefined>(AUDIENCE_KEY, targets) ?? ['staff'];
+    if (!allowed.includes(audience)) throw new ForbiddenException('This account cannot use this page');
+
+    if (audience === 'parent') req.user = { guardianId: payload.sub, schoolId: payload.school, role: 'parent' };
+    else if (audience === 'student') req.user = { studentId: payload.sub, schoolId: payload.school, role: 'student' };
+    else req.user = { staffId: payload.sub, schoolId: payload.school, role: payload.role };
+
     const roles = this.reflector.getAllAndOverride<Role[] | undefined>(ROLES_KEY, targets);
-    if (roles && !roles.includes(req.user.role)) throw new ForbiddenException('Your role cannot do this');
+    if (roles && (audience !== 'staff' || !roles.includes(payload.role as Role))) {
+      throw new ForbiddenException('Your role cannot do this');
+    }
     return true;
   }
 }

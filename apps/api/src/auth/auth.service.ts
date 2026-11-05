@@ -7,7 +7,7 @@ import { DbService, scopeToSchool } from '../db/db.service';
 import { schools, sections, staff } from '../db/schema';
 import { rethrowUnique } from '../common/validation';
 import { DEFAULT_SECTIONS } from '../setup/defaults';
-import { Role } from './auth.types';
+import { TokenRole } from './auth.types';
 
 export const registerSchema = z.object({
   school: z.object({
@@ -86,7 +86,9 @@ export class AuthService {
     };
   }
 
-  sign(staffId: string, schoolId: string, role: Role): Promise<string> {
-    return this.jwt.signAsync({ sub: staffId, school: schoolId, role });
+  /** Staff tokens last 12 hours, parent tokens 30 days (they log in on their phones), student tokens 6 hours. */
+  sign(subjectId: string, schoolId: string, role: TokenRole): Promise<string> {
+    const expiresIn = role === 'parent' ? '30d' : role === 'student' ? '6h' : '12h';
+    return this.jwt.signAsync({ sub: subjectId, school: schoolId, role }, { expiresIn });
   }
 }
