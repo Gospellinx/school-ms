@@ -226,6 +226,8 @@ describe('fee recovery autopilot and parent follow-ups', () => {
     await http.patch('/api/automations/settings').set(owner()).send({ digestRecipients: [{ name: 'X', channel: 'whatsapp' }] }).expect(400);
     const preview = (await http.get('/api/automations/daily-summary/preview').set(owner()).expect(200)).body;
     expect(preview.figures.paymentsToday).toEqual({ count: 1, kobo: 100_000_00 });
+    expect(Array.isArray(preview.figures.alerts)).toBe(true);
+    expect(Array.isArray(preview.figures.forecasts)).toBe(true);
     expect(preview.figures.attendance).toMatchObject({ classes: 1, marked: 1, present: 1, absent: 1 });
 
     expect(await run()).toMatchObject({ dailySummaries: 1 });

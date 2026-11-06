@@ -47,6 +47,7 @@ import {
   terms,
 } from '../db/schema';
 import { EmailProvider } from '../messaging/email.provider';
+import { LiveService } from '../live/live.service';
 import { LogProvider, MessagingProvider } from '../messaging/messaging.provider';
 import { NotificationsService } from '../messaging/notifications.service';
 import { viewPlan } from './plans';
@@ -118,6 +119,7 @@ export class AutomationsService implements OnModuleInit, OnModuleDestroy {
     private readonly notifications: NotificationsService,
     private readonly email: EmailProvider,
     private readonly sms: MessagingProvider,
+    private readonly live: LiveService,
   ) {}
 
   onModuleInit() {
@@ -815,7 +817,10 @@ export class AutomationsService implements OnModuleInit, OnModuleDestroy {
       : [];
     const run = (k: string) => runs.find((r) => r.kind === k)?.runs ?? 0;
     const msg = (s: string) => msgs.find((m) => m.status === s)?.n ?? 0;
+    const live = await this.liveDigest(tx, ctx);
     return {
+      alerts: live.alerts,
+      forecasts: live.forecasts,
       date: today,
       paymentsToday: { count: paid.count, kobo: Number(paid.kobo) },
       term: ctx.term ? { name: ctx.term.name, expectedKobo: Number(term.expected), collectedKobo: Number(term.collected) } : null,
@@ -825,6 +830,22 @@ export class AutomationsService implements OnModuleInit, OnModuleDestroy {
       plansBehind: { count: behind.length, kobo: behind.reduce((s, p) => s + p.behindKobo, 0) },
       topOwing: topOwing.map((c) => ({ class: `${c.name}${c.arm ? ` ${c.arm}` : ''}`, kobo: Number(c.owed) })),
     };
+  }
+
+  /** The live monitor's open alerts and exam forecasts, seen as the proprietor would see them. */
+  private async liveDigest(tx: Tx, ctx: Ctx) {
+    const [owner] = await tx.select({ id: staff.id }).from(staff).where(eq(staff.role, 'proprietor')).limit(1);
+    if (!owner) return { alerts: [], forecasts: [] };
+    try {
+      const snap = await this.live.snapshot({ staffId: owner.id, schoolId: ctx.school.id, role: 'proprietor' });
+      return {
+        alerts: snap.alerts.filter((a) => a.severity !== 'info').slice(0, 5).map((a) => ({ severity: a.severity, title: a.title, detail: a.detail })),
+        forecasts: snap.forecasts.map((f) => ({ exam: f.examName, students: f.students, onTrack: f.onTrack, atRisk: f.atRisk })),
+      };
+    } catch (err) {
+      this.logger.warn(`Live alerts left out of the daily summary: ${(err as Error).message}`);
+      return { alerts: [], forecasts: [] };
+    }
   }
 
   private summaryText(ctx: Ctx, f: Awaited<ReturnType<AutomationsService['dailyFigures']>>) {
@@ -839,6 +860,8 @@ export class AutomationsService implements OnModuleInit, OnModuleDestroy {
     ];
     if (f.plansBehind.count) lines.push(`Payment plans behind: ${f.plansBehind.count} (${formatNaira(f.plansBehind.kobo)})`);
     if (f.topOwing.length) lines.push(`Most owed: ${f.topOwing.map((c) => `${c.class} ${compactNaira(c.kobo)}`).join(', ')}`);
+    for (const fc of f.forecasts) lines.push(`${fc.exam} forecast: ${fc.onTrack} of ${fc.students} on track, ${fc.atRisk} at risk`);
+    if (f.alerts.length) lines.push(`Needs attention: ${f.alerts.map((a) => a.title).join('; ')}`);
     const subject = `${ctx.school.name} daily summary, ${shortDate(f.date)}`;
     return {
       subject,
