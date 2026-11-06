@@ -52,11 +52,12 @@ async function makePdf(pages: string[]): Promise<Buffer> {
 }
 
 const SCHEME = `SS 2 Physics Scheme of Work, First Term
-Week 1: Revision of motion
+Week 1: Motion
 Week 2: Electric current and charge
 Week 3: Ohm's law
 Week 4: Resistors in series and parallel
-Week 5: Waves`;
+Week 5: Waves
+Week 6: Mid-term test and break`;
 
 const NOTE = `Lesson note: Ohm's law (SS 2 Physics)
 
