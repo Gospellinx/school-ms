@@ -29,7 +29,7 @@ import {
   students,
   subjects,
 } from '../db/schema';
-import { EmailService, QueuedEmail } from '../email/email.service';
+import { AdmissionsEmailService, QueuedEmail } from './admissions-email.service';
 import { PaystackClient, PaystackTransaction } from '../fees/paystack.client';
 
 type School = typeof schools.$inferSelect;
@@ -127,7 +127,7 @@ export class AdmissionsService {
   constructor(
     private readonly dbs: DbService,
     private readonly cbt: CbtService,
-    private readonly email: EmailService,
+    private readonly email: AdmissionsEmailService,
     private readonly paystack: PaystackClient,
   ) {}
 
@@ -158,7 +158,7 @@ export class AdmissionsService {
   }
 
   private async mail(tx: Tx, school: School, site: Site | undefined, a: Application, e: Omit<QueuedEmail, 'to' | 'applicationId'>) {
-    await this.email.queue(tx, school.id, school.name, { ...e, to: a.parentEmail, applicationId: a.id }, site?.accentColor);
+    await this.email.queue(tx, school.id, { ...e, to: a.parentEmail, applicationId: a.id });
   }
 
   private async sms(tx: Tx, a: Application, kind: string, body: string) {
@@ -488,19 +488,13 @@ export class AdmissionsService {
     await this.sms(tx, a, 'admission', `${school.name}: we received ${a.firstName}'s application (${a.reference}). We will email ${a.parentEmail} with the next step.`);
     const office = site?.admissionsEmail ?? school.email;
     if (office) {
-      await this.email.queue(
-        tx,
-        school.id,
-        school.name,
-        {
+      await this.email.queue(tx, school.id, {
           to: office,
           subject: `New application: ${fullName(a)} for ${cls}`,
           kind: 'admission_office_alert',
           applicationId: a.id,
           body: [`${fullName(a)} has applied for ${cls} (${a.reference}).`, `Parent: ${a.parentName}, ${a.parentPhone}, ${a.parentEmail}.`, `Open admissions: ${config.portalUrl()}/admin/admissions`],
-        },
-        site?.accentColor,
-      );
+      });
     }
   }
 

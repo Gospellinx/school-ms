@@ -82,7 +82,6 @@ CREATE TABLE "email_outbox" (
 	"to" text NOT NULL,
 	"subject" text NOT NULL,
 	"text" text NOT NULL,
-	"html" text NOT NULL,
 	"kind" text NOT NULL,
 	"application_id" uuid,
 	"only_if_status" text,

@@ -4,7 +4,7 @@ import { config } from '../common/config';
 import { Tx } from '../db/client';
 import { DbService } from '../db/db.service';
 import { applications, emailOutbox, schools } from '../db/schema';
-import { EmailProvider } from './email.provider';
+import { EmailProvider } from '../messaging/email.provider';
 
 const MAX_ATTEMPTS = 3;
 
@@ -20,39 +20,18 @@ export interface QueuedEmail {
   sendAfter?: Date;
 }
 
-const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-/** A plain, mobile-friendly email: the school's name on top, short paragraphs, links as buttons. */
-export function renderEmail(schoolName: string, subject: string, body: string[], accent = '#6a3bf0') {
-  const text = [...body, '', `${schoolName}`].join('\n\n');
-  const blocks = body
-    .map((p) => {
-      const link = p.match(/^(.*?)(https?:\/\/\S+)$/);
-      if (link) {
-        const label = link[1].replace(/[:\s]+$/, '') || 'Open';
-        return `<p style="margin:24px 0"><a href="${escape(link[2])}" style="background:${accent};color:#fff;text-decoration:none;padding:12px 20px;border-radius:12px;font-weight:600;display:inline-block">${escape(label)}</a></p>`;
-      }
-      return `<p style="margin:0 0 14px;line-height:1.55">${escape(p).replace(/\n/g, '<br>')}</p>`;
-    })
-    .join('');
-  const html = `<!doctype html><html><body style="margin:0;background:#f4f4f6;font-family:Arial,Helvetica,sans-serif;color:#16151c">
-<div style="max-width:560px;margin:0 auto;padding:24px 16px">
-<p style="font-weight:700;font-size:18px;margin:0 0 16px;color:${accent}">${escape(schoolName)}</p>
-<div style="background:#fff;border-radius:16px;padding:24px">
-<h1 style="font-size:20px;margin:0 0 16px">${escape(subject)}</h1>${blocks}
-</div>
-<p style="font-size:12px;color:#6f6c7a;margin:16px 4px">Sent by ${escape(schoolName)} through Linx School.</p>
-</div></body></html>`;
-  return { text, html };
+/** Plain text paragraphs; the shared email provider turns them into a mobile-friendly HTML email with clickable links. */
+export function renderEmail(body: string[]) {
+  return body.join('\n\n');
 }
 
 /**
- * Email outbox. Features queue emails inside their own transaction; a worker sends them
+ * Admissions email outbox, sent through the shared EmailProvider (Brevo, Resend or log). Features queue emails inside their own transaction; a worker sends them
  * when they fall due, so follow-ups (e.g. "your form is not paid yet") can be scheduled days ahead.
  */
 @Injectable()
-export class EmailService implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(EmailService.name);
+export class AdmissionsEmailService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(AdmissionsEmailService.name);
   private timer?: NodeJS.Timeout;
   private running = false;
 
@@ -62,7 +41,7 @@ export class EmailService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    const every = config.email().pollMs;
+    const every = config.admissionsEmailPollMs();
     if (every > 0) {
       this.timer = setInterval(() => this.dispatchDue().catch((err) => this.logger.error(err)), every);
       this.timer.unref();
@@ -73,8 +52,8 @@ export class EmailService implements OnModuleInit, OnModuleDestroy {
     if (this.timer) clearInterval(this.timer);
   }
 
-  async queue(tx: Tx, schoolId: string, schoolName: string, e: QueuedEmail, accent?: string | null) {
-    const { text, html } = renderEmail(schoolName, e.subject, e.body, accent ?? undefined);
+  async queue(tx: Tx, schoolId: string, e: QueuedEmail) {
+    const text = renderEmail(e.body);
     const [row] = await tx
       .insert(emailOutbox)
       .values({
@@ -82,7 +61,6 @@ export class EmailService implements OnModuleInit, OnModuleDestroy {
         to: e.to,
         subject: e.subject,
         text,
-        html,
         kind: e.kind,
         applicationId: e.applicationId,
         onlyIfStatus: e.onlyIfStatus,
@@ -153,7 +131,6 @@ export class EmailService implements OnModuleInit, OnModuleDestroy {
           to: e.to,
           subject: e.subject,
           text: e.text,
-          html: e.html,
           fromName: school?.name,
           replyTo: school?.email ?? undefined,
         });

@@ -7,8 +7,8 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { DbService } from '../src/db/db.service';
-import { EmailProvider, LogEmailProvider } from '../src/email/email.provider';
-import { EmailService } from '../src/email/email.service';
+import { AdmissionsEmailService } from '../src/admissions/admissions-email.service';
+import { EmailProvider, LogEmailProvider } from '../src/messaging/email.provider';
 import { InitializeParams, PaystackClient } from '../src/fees/paystack.client';
 import { LogProvider, MessagingProvider } from '../src/messaging/messaging.provider';
 
@@ -28,7 +28,7 @@ class FakePaystack extends PaystackClient {
 let app: INestApplication;
 let http: ReturnType<typeof request>;
 let mailbox: LogEmailProvider;
-let email: EmailService;
+let email: AdmissionsEmailService;
 let dbs: DbService;
 const paystack = new FakePaystack();
 const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
@@ -47,7 +47,7 @@ beforeAll(async () => {
   await app.init();
   http = request(app.getHttpServer());
   mailbox = app.get(EmailProvider) as LogEmailProvider;
-  email = app.get(EmailService);
+  email = app.get(AdmissionsEmailService);
   dbs = app.get(DbService);
 });
 
@@ -181,7 +181,6 @@ describe('school website and online admissions', () => {
     expect(sent.sent).toBe(1); // the "complete your application" email; reminders wait
     expect(mailbox.sent.at(-1)).toMatchObject({ to: 'bello@parents.test', fromName: 'Admit Academy', replyTo: 'office@admit.test' });
     expect(mailbox.sent.at(-1)!.text).toContain(`/s/admit-academy/application?ref=${ctx.ref}&key=${ctx.key}`);
-    expect(mailbox.sent.at(-1)!.html).toContain('#1d4ed8');
   });
 
   it('confirms the Paystack form fee from the webhook and moves the application on', async () => {
@@ -210,7 +209,7 @@ describe('school website and online admissions', () => {
     const reminders = (await dbs.withSchool(ctx.schoolId, (tx) => tx.execute(sql`select status from email_outbox where kind = 'admission_fee_reminder'`))).rows;
     expect(reminders).toEqual([{ status: 'skipped' }, { status: 'skipped' }]);
     // Safety net: a follow-up whose condition no longer holds when it falls due is skipped, not sent.
-    await dbs.withSchool(ctx.schoolId, (tx) => email.queue(tx, ctx.schoolId, 'Admit Academy', { to: 'x@parents.test', subject: 'Stale', body: ['x'], kind: 'test', applicationId: app.id, onlyIfStatus: 'pending_payment' }));
+    await dbs.withSchool(ctx.schoolId, (tx) => email.queue(tx, ctx.schoolId, { to: 'x@parents.test', subject: 'Stale', body: ['x'], kind: 'test', applicationId: app.id, onlyIfStatus: 'pending_payment' }));
     expect((await email.dispatchForSchool(ctx.schoolId)).skipped).toBe(1);
     const subjects = mailbox.sent.map((m) => m.subject);
     expect(subjects).toContain(`Application received: Amina Bello (${ctx.ref})`);

@@ -955,7 +955,6 @@ export const emailOutbox = pgTable(
     to: text('to').notNull(),
     subject: text('subject').notNull(),
     text: text('text').notNull(),
-    html: text('html').notNull(),
     kind: text('kind').notNull(),
     applicationId: uuid('application_id').references(() => applications.id, { onDelete: 'cascade' }),
     onlyIfStatus: text('only_if_status'),

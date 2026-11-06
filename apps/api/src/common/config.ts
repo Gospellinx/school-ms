@@ -7,14 +7,18 @@ export const config = {
     senderId: process.env.TERMII_SENDER_ID ?? 'LinxSchool',
     baseUrl: process.env.TERMII_BASE_URL ?? 'https://api.ng.termii.com',
   }),
-  /** Email for admissions follow-ups. Resend (https://resend.com) when RESEND_API_KEY is set; otherwise only logged. */
   email: () => ({
-    provider: process.env.EMAIL_PROVIDER ?? (process.env.RESEND_API_KEY ? 'resend' : 'log'),
+    /** brevo, resend or log (sandbox). Picks a provider from whichever key is set when left out. */
+    provider: process.env.EMAIL_PROVIDER ?? (process.env.BREVO_API_KEY ? 'brevo' : process.env.RESEND_API_KEY ? 'resend' : 'log'),
+    brevoApiKey: process.env.BREVO_API_KEY,
     resendApiKey: process.env.RESEND_API_KEY,
-    from: process.env.EMAIL_FROM ?? 'Linx School <admissions@linxschool.ng>',
-    /** How often the email outbox is checked for due follow-ups. 0 turns the worker off. */
-    pollMs: Number(process.env.EMAIL_POLL_MS ?? process.env.NOTIFICATIONS_POLL_MS ?? 15000),
+    fromAddress: process.env.EMAIL_FROM ?? 'no-reply@linxschool.ng',
+    fromName: process.env.EMAIL_FROM_NAME ?? 'Linx School',
+    /** When set, every email goes to this address instead: for trying real keys safely. */
+    sandboxTo: process.env.EMAIL_SANDBOX_TO || undefined,
   }),
+  /** How often due admissions emails (including scheduled follow-ups) are sent. 0 turns the worker off. */
+  admissionsEmailPollMs: () => Number(process.env.ADMISSIONS_EMAIL_POLL_MS ?? process.env.NOTIFICATIONS_POLL_MS ?? 15000),
   /** How often the outbox worker sends queued SMS and WhatsApp messages. 0 turns the worker off. */
   notificationsPollMs: () => Number(process.env.NOTIFICATIONS_POLL_MS ?? 5000),
   paystack: () => ({
