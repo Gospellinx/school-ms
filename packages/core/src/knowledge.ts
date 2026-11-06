@@ -94,6 +94,9 @@ export interface OutlineEntry {
  * Reads the weekly topics from a scheme of work, from lines such as
  * "Week 3: Electric circuits", "WEEK 4 - Ohm's law" or "Wk 5. Revision".
  */
+/** Weeks set aside for revision, tests or exams, which are not topics a student can study. */
+const NON_TOPIC = /^(?:general\s+)?(?:revision|examinations?|exams?|mid[\s-]?term|tests?|continuous assessment|ca\b|closing|resumption|holiday|break)\b/i;
+
 export function parseSchemeOfWork(text: string): OutlineEntry[] {
   const out = new Map<number, string>();
   for (const line of text.split(/\r?\n/)) {
@@ -101,7 +104,7 @@ export function parseSchemeOfWork(text: string): OutlineEntry[] {
     if (!m) continue;
     const week = Number(m[1]);
     const topic = m[2].replace(/^(topic|theme)\s*[:\-–]\s*/i, '').replace(/\s+/g, ' ').trim();
-    if (week < 1 || week > 16 || topic.length < 2 || out.has(week)) continue;
+    if (week < 1 || week > 16 || topic.length < 2 || NON_TOPIC.test(topic) || out.has(week)) continue;
     out.set(week, topic.slice(0, 120));
   }
   return [...out.entries()].sort((a, b) => a[0] - b[0]).map(([week, topic]) => ({ week, topic }));

@@ -119,6 +119,19 @@ function TakeTest() {
       </div>
       <ErrorNote className="mb-4">{error}</ErrorNote>
       <Progress value={(answered / qs.length) * 100} className="mb-5" />
+      {attempt.mock && attempt.mock.subjects.length > 1 ? (
+        <div className="scrollbar-none mb-4 flex gap-1 overflow-x-auto rounded-2xl bg-white p-1" role="tablist" aria-label="Subjects">
+          {attempt.mock.subjects.map((s) => {
+            const first = qs.findIndex((x) => x.subjectId === s.subjectId);
+            const done = qs.filter((x) => x.subjectId === s.subjectId && answers[x.id]).length;
+            return (
+              <button key={s.subjectId} role="tab" aria-selected={cur.subjectId === s.subjectId} onClick={() => first >= 0 && setI(first)} className={cn("h-9 shrink-0 rounded-xl px-3 text-sm font-semibold", cur.subjectId === s.subjectId ? "bg-brand-600 text-white" : "text-muted")}>
+                {s.name} <span className="text-xs opacity-80">{done}/{s.count}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
       <div className="grid gap-5 lg:grid-cols-[1fr_260px]">
         <Card>
           <p className="text-xs font-semibold tracking-wide text-muted uppercase">{cur.topic}</p>
@@ -189,7 +202,7 @@ function Review({ attempt }: { attempt: Attempt }) {
   return (
     <div className="mx-auto max-w-3xl">
       <Card className="text-center">
-        <p className="text-sm font-semibold text-brand-600">{attempt.kind === "practice" ? "Practice submitted" : "Test submitted"}</p>
+        <p className="text-sm font-semibold text-brand-600">{attempt.kind === "practice" ? "Practice submitted" : attempt.kind === "mock" ? `${attempt.title} submitted` : "Test submitted"}</p>
         {r ? (
           <>
             <p className="mt-2 text-6xl font-bold">{Math.round(r.percentage)}%</p>
@@ -198,9 +211,22 @@ function Review({ attempt }: { attempt: Attempt }) {
         ) : (
           <p className="mt-2 text-muted">Your teacher will share the results.</p>
         )}
+        {attempt.mock?.breakdown ? (
+          <div className="mx-auto mt-5 max-w-md text-left">
+            {attempt.mock.breakdown.jambScore !== null ? <p className="mb-3 text-center text-lg font-bold">UTME score: {attempt.mock.breakdown.jambScore} / 400</p> : null}
+            <ul className="flex flex-col gap-1.5">
+              {attempt.mock.breakdown.subjects.map((s) => (
+                <li key={s.subjectId} className="flex items-center justify-between rounded-xl bg-canvas px-3 py-2 text-sm">
+                  <span className="font-medium">{s.name}</span>
+                  <span>{s.correct}/{s.questions} · <strong>{s.percentage}%</strong> · {s.grade}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <div className="mt-6 flex justify-center gap-2">
-          <Link href="/student/cbt" className={buttonClass("outline")}>Back to tests</Link>
-          <Link href="/student/prep" className={buttonClass()}>Exam prep</Link>
+          <Link href={attempt.kind === "test" ? "/student/cbt" : "/student/prep"} className={buttonClass("outline")}>{attempt.kind === "test" ? "Back to tests" : "Back to exam prep"}</Link>
+          <Link href="/student/tutor" className={buttonClass()}>Ask the tutor</Link>
         </div>
       </Card>
       {reveal ? (
@@ -220,10 +246,11 @@ function Review({ attempt }: { attempt: Attempt }) {
                       </li>
                     ))}
                   </ul>
+                  {q.explanation && !explained[q.id] ? <p className="mt-3 rounded-2xl bg-canvas p-3 text-sm whitespace-pre-line">{q.explanation}</p> : null}
                   {explained[q.id] ? (
                     <p className="mt-3 rounded-2xl bg-brand-50 p-3 text-sm whitespace-pre-line">{explained[q.id]}</p>
                   ) : !q.correct ? (
-                    <Button size="sm" variant="secondary" className="mt-3" disabled={busy === q.id} onClick={() => explain(q.id)}><Sparkles className="h-3.5 w-3.5" /> {busy === q.id ? "Explaining…" : "Explain this"}</Button>
+                    <Button size="sm" variant="secondary" className="mt-3" disabled={busy === q.id} onClick={() => explain(q.id)}><Sparkles className="h-3.5 w-3.5" /> {busy === q.id ? "Explaining…" : "Explain step by step"}</Button>
                   ) : null}
                 </div>
               </div>

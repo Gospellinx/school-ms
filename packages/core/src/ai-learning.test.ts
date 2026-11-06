@@ -31,9 +31,8 @@ describe('knowledge base chunks', () => {
   });
 
   it('reads weekly topics from a scheme of work', () => {
-    const outline = parseSchemeOfWork('WEEK 1 - Revision\nWeek 2: Topic: Electric circuits\nwk 3. Ohm’s law\nWeek 3: duplicate\nNotes');
+    const outline = parseSchemeOfWork('WEEK 1 - Revision of SS 1 work\nWeek 2: Topic: Electric circuits\nwk 3. Ohm’s law\nWeek 3: duplicate\nWeek 6: Mid-term test and break\nWeek 12: Examination\nNotes');
     expect(outline).toEqual([
-      { week: 1, topic: 'Revision' },
       { week: 2, topic: 'Electric circuits' },
       { week: 3, topic: 'Ohm’s law' },
     ]);
