@@ -1,4 +1,4 @@
-import { BarChart3, BookOpen, Bot, CalendarCheck, CalendarDays, ClipboardList, CreditCard, FileText, GraduationCap, LayoutDashboard, Library, LifeBuoy, MessageSquare, MonitorCheck, School, Settings, ShieldCheck, Sparkles, Target, UserCog, Users, Wallet, type LucideIcon } from "lucide-react";
+import { BarChart3, BookOpen, Bot, CalendarCheck, CalendarDays, ClipboardList, CreditCard, FileText, GraduationCap, LayoutDashboard, Library, LifeBuoy, MessageSquare, MonitorCheck, School, Settings, ShieldCheck, Sparkles, Target, UserCog, Users, Wallet, Zap, type LucideIcon } from "lucide-react";
 
 export type Role = "super-admin" | "admin" | "teacher" | "student" | "parent";
 
@@ -38,6 +38,7 @@ export const roles: Record<Role, RoleConfig> = {
       { label: "Results", href: "/admin/results", icon: BarChart3 },
       { label: "Attendance", href: "/admin/attendance", icon: CalendarCheck },
       { label: "Fees", href: "/admin/fees", icon: Wallet },
+      { label: "Autopilot", href: "/admin/autopilot", icon: Zap },
       { label: "Messages", href: "/admin/messages", icon: MessageSquare },
       { label: "Knowledge Base", href: "/admin/knowledge", icon: Library },
       { label: "AI Usage & Safety", href: "/admin/ai", icon: ShieldCheck },

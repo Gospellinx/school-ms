@@ -38,6 +38,10 @@ import { KnowledgeService } from './knowledge/knowledge.service';
 import { ExamPrepService } from './prep/exam-prep.service';
 import { TutorController } from './tutor/tutor.controller';
 import { TutorService } from './tutor/tutor.service';
+import { AutomationsService } from './autopilot/automations.service';
+import { AutopilotController } from './autopilot/autopilot.controller';
+import { PayLinksController } from './autopilot/pay-links.controller';
+import { EmailProvider, emailProviderFactory } from './messaging/email.provider';
 
 @Module({
   imports: [DbModule, AuthModule],
@@ -62,6 +66,8 @@ import { TutorService } from './tutor/tutor.service';
     TeachingController,
     TutorController,
     AiAdminController,
+    AutopilotController,
+    PayLinksController,
   ],
   providers: [
     ResultsService,
@@ -70,6 +76,7 @@ import { TutorService } from './tutor/tutor.service';
     FeesService,
     PaystackClient,
     { provide: MessagingProvider, useFactory: messagingProviderFactory },
+    { provide: EmailProvider, useFactory: emailProviderFactory },
     NotificationsService,
     PortalAuthService,
     CbtService,
@@ -80,6 +87,7 @@ import { TutorService } from './tutor/tutor.service';
     TeachingService,
     TutorService,
     ExamPrepService,
+    AutomationsService,
   ],
 })
 export class AppModule {}

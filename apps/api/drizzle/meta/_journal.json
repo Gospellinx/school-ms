@@ -64,6 +64,13 @@
       "when": 1793978045880,
       "tag": "0008_teacher_assistant",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793989696802,
+      "tag": "0009_fee_recovery_autopilot",
+      "breakpoints": true
     }
   ]
 }

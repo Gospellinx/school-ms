@@ -7,6 +7,18 @@ export const config = {
     senderId: process.env.TERMII_SENDER_ID ?? 'LinxSchool',
     baseUrl: process.env.TERMII_BASE_URL ?? 'https://api.ng.termii.com',
   }),
+  email: () => ({
+    /** brevo, resend or log (sandbox). Picks a provider from whichever key is set when left out. */
+    provider: process.env.EMAIL_PROVIDER ?? (process.env.BREVO_API_KEY ? 'brevo' : process.env.RESEND_API_KEY ? 'resend' : 'log'),
+    brevoApiKey: process.env.BREVO_API_KEY,
+    resendApiKey: process.env.RESEND_API_KEY,
+    fromAddress: process.env.EMAIL_FROM ?? 'no-reply@linxschool.ng',
+    fromName: process.env.EMAIL_FROM_NAME ?? 'Linx School',
+    /** When set, every email goes to this address instead: for trying real keys safely. */
+    sandboxTo: process.env.EMAIL_SANDBOX_TO || undefined,
+  }),
+  /** How often the autopilot checks for fee reminders, reports and follow-ups. 0 turns it off. */
+  automationsPollMs: () => Number(process.env.AUTOMATIONS_POLL_MS ?? 5 * 60 * 1000),
   /** How often the outbox worker sends queued SMS and WhatsApp messages. 0 turns the worker off. */
   notificationsPollMs: () => Number(process.env.NOTIFICATIONS_POLL_MS ?? 5000),
   paystack: () => ({

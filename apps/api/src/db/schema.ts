@@ -13,7 +13,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import type { AssessmentComponent, GradingScale, MarkSuggestion, OutlineEntry, RubricPoint } from '@school-ms/core';
+import type { AssessmentComponent, FollowUpChannel, GradingScale, Instalment, MarkSuggestion, OutlineEntry, RubricPoint, SequenceStep } from '@school-ms/core';
 
 /**
  * Every table except `schools` carries school_id and is protected by a Postgres
@@ -214,7 +214,7 @@ export const reportComments = pgTable(
 
 // ---------------------------------------------------------------- Parents
 
-export const messageChannel = pgEnum('message_channel', ['sms', 'whatsapp']);
+export const messageChannel = pgEnum('message_channel', ['sms', 'whatsapp', 'email']);
 
 /** A parent or guardian. Identified by phone number, which is how they log in. */
 export const guardians = pgTable(
@@ -394,7 +394,10 @@ export const notifications = pgTable(
     id: id(),
     schoolId: schoolId(),
     channel: messageChannel('channel').notNull(),
+    /** A phone number for SMS and WhatsApp, an address for email. */
     to: text('to').notNull(),
+    /** Email subject line; empty for SMS and WhatsApp. */
+    subject: text('subject'),
     body: text('body').notNull(),
     /** e.g. attendance_absent, results_published, payment_received, fee_reminder, broadcast */
     kind: text('kind').notNull(),
@@ -812,6 +815,10 @@ export const tenantTables = [
   'exam_goals',
   'essay_tasks',
   'essay_scripts',
+  'automation_settings',
+  'follow_up_sequences',
+  'automation_runs',
+  'instalment_plans',
 ] as const;
 
 /**
@@ -823,5 +830,120 @@ export const platformAdmins = pgTable('platform_admins', {
   fullName: text('full_name').notNull(),
   email: text('email').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
+  createdAt: createdAt(),
+});
+
+// ---------------------------------------------------------------- Autopilot (fee recovery and parent follow-ups)
+
+/** Someone who gets the proprietor's daily summary. */
+export interface DigestRecipient {
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  channel: 'sms' | 'whatsapp' | 'email';
+}
+
+/**
+ * One row per school: when the autopilot runs (hours are West Africa Time). Fee recovery and the
+ * other follow-ups are switched on per sequence (follow_up_sequences.enabled).
+ */
+export const automationSettings = pgTable('automation_settings', {
+  schoolId: uuid('school_id')
+    .primaryKey()
+    .references(() => schools.id, { onDelete: 'cascade' }),
+  /** Fees fall due this many days after the term starts (instalment plans use their own dates). */
+  feeDueDays: integer('fee_due_days').notNull().default(14),
+  /** With report cards withheld for debt, parents on an instalment plan that is up to date can still see results. */
+  holdAllowsPlans: boolean('hold_allows_plans').notNull().default(true),
+  weeklyReport: boolean('weekly_report').notNull().default(false),
+  /** 0 = Sunday ... 6 = Saturday */
+  weeklyDay: integer('weekly_day').notNull().default(5),
+  weeklyHour: integer('weekly_hour').notNull().default(16),
+  weeklyChannels: jsonb('weekly_channels').$type<FollowUpChannel[]>().notNull().default(['preferred', 'email']),
+  dailySummary: boolean('daily_summary').notNull().default(false),
+  dailyHour: integer('daily_hour').notNull().default(18),
+  /** Empty means every proprietor, by email. */
+  digestRecipients: jsonb('digest_recipients').$type<DigestRecipient[]>().notNull().default([]),
+  /** Parents are only messaged from sendFrom up to sendUntil. */
+  sendFrom: integer('send_from').notNull().default(7),
+  sendUntil: integer('send_until').notNull().default(20),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** A timed series of messages that starts when something happens (fees due, a new parent, missed days). */
+export const followUpSequences = pgTable(
+  'follow_up_sequences',
+  {
+    id: id(),
+    schoolId: schoolId(),
+    trigger: text('trigger').$type<'fee_overdue' | 'new_parent' | 'absent_streak'>().notNull(),
+    name: text('name').notNull(),
+    enabled: boolean('enabled').notNull().default(false),
+    steps: jsonb('steps').$type<SequenceStep[]>().notNull(),
+    /** Absences in a row before the missed-days sequence starts. */
+    threshold: integer('threshold'),
+    /** Only things that happen after this start a sequence, so switching one on never messages old parents. */
+    enabledAt: timestamp('enabled_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('sequence_school_trigger').on(t.schoolId, t.trigger)],
+);
+
+/**
+ * Every automated send, keyed so it can only happen once (e.g. fee step 2 for one bill and due date).
+ * Doubles as the activity feed the school watches.
+ */
+export const automationRuns = pgTable(
+  'automation_runs',
+  {
+    id: id(),
+    schoolId: schoolId(),
+    key: text('key').notNull(),
+    /** fee_reminder, weekly_report, daily_summary, new_parent, absent_streak */
+    kind: text('kind').notNull(),
+    step: integer('step'),
+    invoiceId: uuid('invoice_id').references(() => invoices.id, { onDelete: 'set null' }),
+    studentId: uuid('student_id').references(() => students.id, { onDelete: 'set null' }),
+    guardianId: uuid('guardian_id').references(() => guardians.id, { onDelete: 'set null' }),
+    messages: integer('messages').notNull().default(0),
+    summary: text('summary'),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('automation_run_key').on(t.schoolId, t.key), index('automation_runs_recent').on(t.schoolId, t.createdAt)],
+);
+
+/** An agreed schedule for paying a bill in parts. Deleting the row cancels the plan. */
+export const instalmentPlans = pgTable(
+  'instalment_plans',
+  {
+    id: id(),
+    schoolId: schoolId(),
+    invoiceId: uuid('invoice_id')
+      .notNull()
+      .references(() => invoices.id, { onDelete: 'cascade' }),
+    /** Instalments for what was still owed when the plan was agreed. */
+    schedule: jsonb('schedule').$type<Instalment[]>().notNull(),
+    /** Already paid when the plan was agreed; only payments after that count towards the instalments. */
+    paidBeforeKobo: integer('paid_before_kobo').notNull().default(0),
+    note: text('note'),
+    createdBy: uuid('created_by').references(() => staff.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('instalment_plan_invoice').on(t.invoiceId)],
+);
+
+/**
+ * Short pay links put in reminders (<portal>/pay/<token>), so a parent can pay without signing in.
+ * Looked up before the school is known, so this table has no row-level security; the API only
+ * ever reads it by token and then works inside that school.
+ */
+export const payLinks = pgTable('pay_links', {
+  token: text('token').primaryKey(),
+  schoolId: schoolId(),
+  invoiceId: uuid('invoice_id')
+    .notNull()
+    .unique()
+    .references(() => invoices.id, { onDelete: 'cascade' }),
   createdAt: createdAt(),
 });
