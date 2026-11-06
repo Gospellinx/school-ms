@@ -6,11 +6,15 @@ import { assertOwned } from '../common/owned';
 import { found } from '../common/validation';
 import { Tx } from '../db/client';
 import { DbService } from '../db/db.service';
+import { AttendanceService } from '../attendance/attendance.service';
+import { config } from '../common/config';
+import { NotificationsService } from '../messaging/notifications.service';
 import {
   academicSessions,
   classes,
   classSubjects,
   reportComments,
+  resultPublications,
   schools,
   scores,
   sections,
@@ -26,7 +30,11 @@ export interface ScoreInput {
 
 @Injectable()
 export class ResultsService {
-  constructor(private readonly dbs: DbService) {}
+  constructor(
+    private readonly dbs: DbService,
+    private readonly attendance: AttendanceService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   private async classContext(tx: Tx, classId: string) {
     const [row] = await tx
@@ -165,6 +173,85 @@ export class ResultsService {
 
   /** Everything a printed report card needs for one student in one term. */
   reportCard(user: Principal, termId: string, studentId: string) {
+    return this.dbs.withSchool(user.schoolId, (tx) => this.buildReportCard(tx, user.schoolId, termId, studentId));
+  }
+
+  /** The class a student's results for a term were entered under, or null if none were. */
+  async resultClassId(tx: Tx, termId: string, studentId: string): Promise<string | null> {
+    const [anyScore] = await tx
+      .select({ classId: scores.classId })
+      .from(scores)
+      .where(and(eq(scores.termId, termId), eq(scores.studentId, studentId)))
+      .limit(1);
+    return anyScore?.classId ?? null;
+  }
+
+  async buildReportCard(tx: Tx, schoolId: string, termId: string, studentId: string) {
+    const [term] = await tx
+      .select({ term: terms, session: academicSessions })
+      .from(terms)
+      .innerJoin(academicSessions, eq(academicSessions.id, terms.sessionId))
+      .where(eq(terms.id, termId));
+    found(term, 'Term');
+    const [student] = await tx.select().from(students).where(eq(students.id, studentId));
+    found(student, 'Student');
+
+    const resultClassId = await this.resultClassId(tx, termId, studentId);
+    if (!resultClassId) throw new BadRequestException('No scores have been entered for this student this term');
+
+    const { ctx, result } = await this.computeForClass(tx, termId, resultClassId);
+    const mine = result.students.find((s) => s.studentId === studentId)!;
+    const subjectNames = new Map(
+      (await tx.select().from(subjects).where(inArray(subjects.id, mine.subjects.map((s) => s.subjectId)))).map((s) => [s.id, s]),
+    );
+    const [comment] = await tx
+      .select()
+      .from(reportComments)
+      .where(and(eq(reportComments.termId, termId), eq(reportComments.studentId, studentId)));
+    const [school] = await this.dbs.db.select().from(schools).where(eq(schools.id, schoolId));
+    const range = await this.attendance.termRange(tx, termId);
+    const attendance = range
+      ? (await this.attendance.summarise(tx, [studentId], range.from, range.to, resultClassId)).get(studentId)!
+      : null;
+
+    return {
+      school: { name: school.name, motto: school.motto, address: school.address },
+      session: term.session.name,
+      term: term.term.name,
+      student: {
+        id: student.id,
+        admissionNumber: student.admissionNumber,
+        name: [student.lastName, student.firstName, student.otherNames].filter(Boolean).join(' '),
+        gender: student.gender,
+      },
+      class: { name: ctx.class.name, arm: ctx.class.arm, section: ctx.section.name },
+      components: ctx.section.components,
+      gradingScale: ctx.section.gradingScale,
+      subjects: mine.subjects
+        .map((s) => ({
+          ...s,
+          name: subjectNames.get(s.subjectId)?.name ?? '',
+          positionText: ordinal(s.position),
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      summary: {
+        grandTotal: mine.grandTotal,
+        average: mine.average,
+        position: mine.position,
+        positionText: ordinal(mine.position),
+        outOf: result.studentCount,
+        classAverage: result.classAverage,
+      },
+      comments: { teacher: comment?.teacherComment ?? null, head: comment?.headComment ?? null },
+      attendance,
+    };
+  }
+
+  /**
+   * Makes a class's term results visible to parents and students, and by default texts
+   * every parent in the class that results are ready.
+   */
+  publish(user: Principal, termId: string, classId: string, notifyGuardians: boolean) {
     return this.dbs.withSchool(user.schoolId, async (tx) => {
       const [term] = await tx
         .select({ term: terms, session: academicSessions })
@@ -172,58 +259,56 @@ export class ResultsService {
         .innerJoin(academicSessions, eq(academicSessions.id, terms.sessionId))
         .where(eq(terms.id, termId));
       found(term, 'Term');
-      const [student] = await tx.select().from(students).where(eq(students.id, studentId));
-      found(student, 'Student');
-
-      const [anyScore] = await tx
-        .select({ classId: scores.classId })
+      await this.classContext(tx, classId);
+      const withScores = await tx
+        .selectDistinct({ studentId: scores.studentId })
         .from(scores)
-        .where(and(eq(scores.termId, termId), eq(scores.studentId, studentId)))
-        .limit(1);
-      if (!anyScore) throw new BadRequestException('No scores have been entered for this student this term');
+        .where(and(eq(scores.termId, termId), eq(scores.classId, classId)));
+      if (withScores.length === 0) throw new BadRequestException('No scores have been entered for this class this term');
 
-      const { ctx, result } = await this.computeForClass(tx, termId, anyScore.classId);
-      const mine = result.students.find((s) => s.studentId === studentId)!;
-      const subjectNames = new Map(
-        (await tx.select().from(subjects).where(inArray(subjects.id, mine.subjects.map((s) => s.subjectId)))).map((s) => [s.id, s]),
-      );
-      const [comment] = await tx
+      const [existing] = await tx
         .select()
-        .from(reportComments)
-        .where(and(eq(reportComments.termId, termId), eq(reportComments.studentId, studentId)));
-      const [school] = await this.dbs.db.select().from(schools).where(eq(schools.id, user.schoolId));
+        .from(resultPublications)
+        .where(and(eq(resultPublications.termId, termId), eq(resultPublications.classId, classId)));
+      if (existing) return { publication: existing, parentsNotified: 0 };
 
-      return {
-        school: { name: school.name, motto: school.motto, address: school.address },
-        session: term.session.name,
-        term: term.term.name,
-        student: {
-          id: student.id,
-          admissionNumber: student.admissionNumber,
-          name: [student.lastName, student.firstName, student.otherNames].filter(Boolean).join(' '),
-          gender: student.gender,
-        },
-        class: { name: ctx.class.name, arm: ctx.class.arm, section: ctx.section.name },
-        components: ctx.section.components,
-        gradingScale: ctx.section.gradingScale,
-        subjects: mine.subjects
-          .map((s) => ({
-            ...s,
-            name: subjectNames.get(s.subjectId)?.name ?? '',
-            positionText: ordinal(s.position),
-          }))
-          .sort((a, b) => a.name.localeCompare(b.name)),
-        summary: {
-          grandTotal: mine.grandTotal,
-          average: mine.average,
-          position: mine.position,
-          positionText: ordinal(mine.position),
-          outOf: result.studentCount,
-          classAverage: result.classAverage,
-        },
-        comments: { teacher: comment?.teacherComment ?? null, head: comment?.headComment ?? null },
-      };
+      const [publication] = await tx
+        .insert(resultPublications)
+        .values({ schoolId: user.schoolId, termId, classId, publishedBy: user.staffId })
+        .returning();
+      const parentsNotified = notifyGuardians
+        ? await this.notifications.queueForGuardians(
+            tx,
+            user.schoolId,
+            withScores.map((s) => s.studentId),
+            'results_published',
+            (s) =>
+              `Dear parent, ${s.firstName} ${s.lastName}'s ${term.term.name} ${term.session.name} result is ready. View it at ${config.portalUrl()}`,
+          )
+        : 0;
+      return { publication, parentsNotified };
     });
+  }
+
+  unpublish(user: Principal, termId: string, classId: string) {
+    return this.dbs.withSchool(user.schoolId, async (tx) => {
+      await tx.delete(resultPublications).where(and(eq(resultPublications.termId, termId), eq(resultPublications.classId, classId)));
+      return { unpublished: true };
+    });
+  }
+
+  listPublications(user: Principal, termId: string) {
+    return this.dbs.withSchool(user.schoolId, (tx) =>
+      tx.select().from(resultPublications).where(eq(resultPublications.termId, termId)),
+    );
+  }
+
+  async isPublished(tx: Tx, termId: string, classId: string): Promise<boolean> {
+    const [row] = await tx
+      .select({ id: resultPublications.id })
+      .from(resultPublications)
+      .where(and(eq(resultPublications.termId, termId), eq(resultPublications.classId, classId)));
+    return Boolean(row);
   }
 
   saveComments(user: Principal, termId: string, studentId: string, input: { teacherComment?: string; headComment?: string }) {

@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --color-brand-50: #f4f1ff;
+  --color-brand-100: #ebe5ff;
+  --color-brand-200: #d9ceff;
+  --color-brand-300: #bda8ff;
+  --color-brand-400: #9b78fb;
+  --color-brand-500: #7c4df6;
+  --color-brand-600: #6a3bf0;
+  --color-brand-700: #5a2bd6;
+  --color-brand-800: #4a25ad;
+  --color-brand-900: #3d218a;
+
+  --color-orchid-100: #fbe8ff;
+  --color-orchid-200: #f5d0fe;
+  --color-orchid-300: #f0abfc;
+  --color-orchid-400: #e879f9;
+
+  --color-canvas: #f4f4f6;
+  --color-ink: #16151c;
+  --color-muted: #6f6c7a;
+  --color-line: #ecebf0;
+
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.75rem;
+}
+
+@layer base {
+  html { -webkit-tap-highlight-color: transparent; }
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  * { border-color: var(--color-line); }
+  ::selection { background: var(--color-brand-200); }
+}
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
+
+/* Print: only the printable sheet, on A4 */
+@media print {
+  @page { size: A4; margin: 12mm; }
+  body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .no-print { display: none !important; }
+  .print-sheet { box-shadow: none !important; border: 0 !important; margin: 0 !important; padding: 0 !important; max-width: none !important; }
+  .print-area { padding: 0 !important; margin: 0 !important; }
+}

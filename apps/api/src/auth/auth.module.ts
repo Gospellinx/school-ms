@@ -16,5 +16,6 @@ function jwtSecret(): string {
   imports: [JwtModule.register({ secret: jwtSecret(), signOptions: { expiresIn: '12h' } })],
   controllers: [AuthController],
   providers: [AuthService, { provide: APP_GUARD, useClass: AuthGuard }],
+  exports: [AuthService],
 })
 export class AuthModule {}
