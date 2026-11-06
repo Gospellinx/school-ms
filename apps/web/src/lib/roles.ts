@@ -1,4 +1,4 @@
-import { BarChart3, BookOpen, Bot, CalendarCheck, CalendarDays, ClipboardList, CreditCard, FileText, GraduationCap, LayoutDashboard, Library, LifeBuoy, MessageSquare, MonitorCheck, School, Settings, ShieldCheck, Sparkles, Target, UserCog, Users, Wallet, type LucideIcon } from "lucide-react";
+import { Activity, BarChart3, BookOpen, Bot, CalendarCheck, CalendarDays, ClipboardList, CreditCard, FileText, GraduationCap, LayoutDashboard, Library, LifeBuoy, MessageSquare, MonitorCheck, School, Settings, ShieldCheck, Sparkles, Target, UserCog, Users, Wallet, type LucideIcon } from "lucide-react";
 
 export type Role = "super-admin" | "admin" | "teacher" | "student" | "parent";
 
@@ -32,6 +32,8 @@ export const roles: Record<Role, RoleConfig> = {
     title: "School Admin",
     menu: [
       { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
+      { label: "Live Monitor", href: "/admin/live", icon: Activity },
+      { label: "Exam Forecast", href: "/admin/forecast", icon: Target },
       { label: "Students", href: "/admin/students", icon: GraduationCap },
       { label: "Staff", href: "/admin/staff", icon: Users },
       { label: "Classes & Subjects", href: "/admin/classes", icon: BookOpen },
@@ -48,6 +50,8 @@ export const roles: Record<Role, RoleConfig> = {
     title: "Teacher",
     menu: [
       { label: "Dashboard", href: "/teacher", icon: LayoutDashboard },
+      { label: "Live Monitor", href: "/teacher/live", icon: Activity },
+      { label: "Exam Forecast", href: "/teacher/forecast", icon: Target },
       { label: "My Classes", href: "/teacher/classes", icon: BookOpen },
       { label: "Score Entry", href: "/teacher/scores", icon: ClipboardList },
       { label: "Attendance", href: "/teacher/attendance", icon: CalendarCheck },
@@ -76,6 +80,7 @@ export const roles: Record<Role, RoleConfig> = {
     menu: [
       { label: "Dashboard", href: "/parent", icon: LayoutDashboard },
       { label: "Results", href: "/parent/results", icon: FileText },
+      { label: "Exam Forecast", href: "/parent/forecast", icon: Target },
       { label: "Fees & Payments", href: "/parent/fees", icon: Wallet },
       { label: "Attendance", href: "/parent/attendance", icon: CalendarCheck },
       { label: "Messages", href: "/parent/messages", icon: MessageSquare },

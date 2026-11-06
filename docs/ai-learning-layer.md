@@ -153,6 +153,24 @@ already confirmed.
 
 ## Phase 3: insights
 
+Built (exam forecast and live monitoring):
+
+- **Exam forecast** (`/admin/forecast`, `/teacher/forecast`, `/parent/forecast`; API `GET /insights/forecast`,
+  `GET /insights/forecast/classes/:id`, `GET /parent/forecast`). Each student's WAEC, NECO, JAMB or BECE
+  prediction uses the same evidence and formula as the student's Exam Prep page, rolled up per class, subject,
+  teacher and school, with a projected share reaching the benchmark (5 credits incl. English and Maths for
+  WAEC/NECO, 6 for BECE, 200+ for JAMB) shown as a range while some students lack evidence. Warning signs:
+  predicted below credit, falling results between released terms, absence runs, low attendance. Classes get
+  "topics to reteach" from CBT, practice and tutor quiz accuracy. Parents get plain words and things to do at home.
+  Logic is in `packages/core/src/forecast.ts`.
+- **Live monitor** (`/admin/live`, `/teacher/live`; API `GET /live`, `GET /live/stream` as Server-Sent Events).
+  Database triggers (migration 0009) `pg_notify` on attendance, payments, invoices, CBT sittings, AI usage,
+  tutor safety flags and result releases; every API server LISTENs and pushes a fresh snapshot to open
+  dashboards within about two seconds. Shows registers, CBT in progress, fees today and this term, AI use and
+  allowance, forecast risk counts, alerts and an activity feed. Teachers see only their classes.
+
+Still to do in this phase: AI usage against outcomes, and email or WhatsApp digests of the alerts.
+
 - Teacher: class progress by topic, who is falling behind, and which topics to reteach.
 - Parent: each child's readiness and weak topics in plain language, with what to do at home.
 - Proprietor: readiness by class and subject, WAEC/BECE projections, teacher and subject

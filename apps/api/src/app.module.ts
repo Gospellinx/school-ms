@@ -38,6 +38,10 @@ import { KnowledgeService } from './knowledge/knowledge.service';
 import { ExamPrepService } from './prep/exam-prep.service';
 import { TutorController } from './tutor/tutor.controller';
 import { TutorService } from './tutor/tutor.service';
+import { InsightsController, ParentForecastController } from './insights/insights.controller';
+import { InsightsService } from './insights/insights.service';
+import { LiveController } from './live/live.controller';
+import { LiveService } from './live/live.service';
 
 @Module({
   imports: [DbModule, AuthModule],
@@ -62,6 +66,9 @@ import { TutorService } from './tutor/tutor.service';
     TeachingController,
     TutorController,
     AiAdminController,
+    InsightsController,
+    ParentForecastController,
+    LiveController,
   ],
   providers: [
     ResultsService,
@@ -80,6 +87,8 @@ import { TutorService } from './tutor/tutor.service';
     TeachingService,
     TutorService,
     ExamPrepService,
+    InsightsService,
+    LiveService,
   ],
 })
 export class AppModule {}
