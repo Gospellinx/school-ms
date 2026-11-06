@@ -12,6 +12,10 @@ export default defineConfig({
     env: {
       DATABASE_URL: process.env.TEST_DATABASE_URL ?? 'postgres://schoolms:schoolms@localhost:5432/schoolms_test',
       JWT_SECRET: 'test-secret',
+      NOTIFICATIONS_POLL_MS: '0',
+      MESSAGING_PROVIDER: 'log',
+      PAYSTACK_SECRET_KEY: 'sk_test_fake',
+      ANTHROPIC_API_KEY: '',
     },
     testTimeout: 20000,
     hookTimeout: 30000,
