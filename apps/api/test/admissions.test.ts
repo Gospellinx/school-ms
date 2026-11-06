@@ -205,7 +205,13 @@ describe('school website and online admissions', () => {
     // Fee reminders fall due later but are skipped because the fee is paid.
     await dbs.withSchool(ctx.schoolId, (tx) => tx.execute(sql`update email_outbox set send_after = now() - interval '1 minute' where status = 'queued'`));
     const r = await email.dispatchForSchool(ctx.schoolId);
-    expect(r.skipped).toBe(2);
+    expect(r.skipped).toBe(0); // cancelled as soon as the fee was paid
+    const [app] = await dbs.withSchool(ctx.schoolId, (tx) => tx.execute(sql`select id from applications limit 1`)).then((x) => x.rows as { id: string }[]);
+    const reminders = (await dbs.withSchool(ctx.schoolId, (tx) => tx.execute(sql`select status from email_outbox where kind = 'admission_fee_reminder'`))).rows;
+    expect(reminders).toEqual([{ status: 'skipped' }, { status: 'skipped' }]);
+    // Safety net: a follow-up whose condition no longer holds when it falls due is skipped, not sent.
+    await dbs.withSchool(ctx.schoolId, (tx) => email.queue(tx, ctx.schoolId, 'Admit Academy', { to: 'x@parents.test', subject: 'Stale', body: ['x'], kind: 'test', applicationId: app.id, onlyIfStatus: 'pending_payment' }));
+    expect((await email.dispatchForSchool(ctx.schoolId)).skipped).toBe(1);
     const subjects = mailbox.sent.map((m) => m.subject);
     expect(subjects).toContain(`Application received: Amina Bello (${ctx.ref})`);
     expect(subjects).toContain('New application: Amina Bello for JSS 1');

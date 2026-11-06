@@ -41,6 +41,8 @@ export type ApplicationStatus = Application['status'];
 /** Answers saved this long after the deadline still count, to allow for slow networks (same as CBT). */
 const GRACE_MS = 30_000;
 const HOUR = 60 * 60 * 1000;
+/** Scheduled nudges; each is also skipped at send time if the application has moved on. */
+const FOLLOW_UPS = ['admission_fee_reminder', 'admission_exam_reminder', 'admission_exam_missed', 'admission_offer_reminder'];
 const DAY = 24 * HOUR;
 
 export const STATUS_LABEL: Record<ApplicationStatus, string> = {
@@ -607,6 +609,7 @@ export class AdmissionsService {
       const paidAt = trx.paid_at ? new Date(trx.paid_at) : new Date();
       const updated = await this.setStatus(tx, a, a.status === 'pending_payment' ? 'applied' : a.status, { feePaidAt: paidAt, feeMethod: `paystack${trx.channel ? ` (${trx.channel})` : ''}` });
       await this.event(tx, a, 'fee_paid', `${formatNaira(a.feeKobo)} paid online`);
+      await this.email.cancel(tx, a.id, ['admission_fee_reminder']);
       if (a.status === 'pending_payment') await this.onSubmitted(tx, school, await this.siteOf(tx, schoolId), updated);
       return { status: 'success' as const, reference: a.reference };
     });
@@ -790,6 +793,7 @@ export class AdmissionsService {
       if (a.status !== 'offered') throw new BadRequestException('There is no offer to accept');
       const updated = await this.setStatus(tx, a, 'accepted', { acceptedAt: new Date() });
       await this.event(tx, a, 'accepted', 'The family accepted the offer online');
+      await this.email.cancel(tx, a.id, ['admission_offer_reminder']);
       const site = await this.siteOf(tx, school.id);
       await this.mail(tx, school, site, updated, {
         subject: `Offer accepted: welcome to ${school.name}`,
@@ -990,6 +994,7 @@ export class AdmissionsService {
       if (a.feePaidAt) throw new BadRequestException('The form fee is already recorded as paid');
       const updated = await this.setStatus(tx, a, a.status === 'pending_payment' ? 'applied' : a.status, { feePaidAt: new Date(), feeMethod: method });
       await this.event(tx, a, 'fee_paid', `${formatNaira(a.feeKobo)} recorded as paid (${method.replace('_', ' ')})`, user.staffId);
+      await this.email.cancel(tx, a.id, ['admission_fee_reminder']);
       if (a.status === 'pending_payment') await this.onSubmitted(tx, school, await this.siteOf(tx, school.id), updated);
       return updated;
     });
@@ -1113,6 +1118,7 @@ export class AdmissionsService {
       if (['enrolled', 'rejected', 'withdrawn'].includes(a.status)) throw new BadRequestException(`This application is already ${STATUS_LABEL[a.status].toLowerCase()}`);
       const updated = await this.setStatus(tx, a, 'rejected', { decisionNote: note ?? null, decidedBy: user.staffId });
       await this.event(tx, a, 'rejected', note, user.staffId);
+      await this.email.cancel(tx, a.id, FOLLOW_UPS);
       await this.mail(tx, school, await this.siteOf(tx, school.id), updated, {
         subject: `Update on ${a.firstName}'s application (${a.reference})`,
         kind: 'admission_rejected',
@@ -1173,6 +1179,7 @@ export class AdmissionsService {
 
       const updated = await this.setStatus(tx, a, 'enrolled', { studentId: student.id, enrolledAt: new Date(), acceptedAt: a.acceptedAt ?? new Date() });
       await this.event(tx, a, 'enrolled', `Admission number ${admissionNumber}`, user.staffId);
+      await this.email.cancel(tx, a.id, FOLLOW_UPS);
       const portal = config.portalUrl();
       await this.mail(tx, school, await this.siteOf(tx, school.id), updated, {
         subject: `Welcome to ${school.name}, ${a.firstName}!`,

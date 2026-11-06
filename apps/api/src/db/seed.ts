@@ -6,6 +6,7 @@
  *   - gcis-demo: five classes from Nursery to SS 3, staff, students with parents, last two
  *     terms' results (published), this term's scores so far, attendance, fees with payments,
  *     a question bank, CBT tests with attempts, and parent messages.
+ *     It also gets a public website with online admissions and applicants at every stage.
  *   - bright-future-demo: a small second school, so the super admin has more than one school.
  * Also creates the platform (super admin) login.
  *
@@ -20,6 +21,7 @@ import { AppModule } from '../app.module';
 import { configureApp } from '../app.setup';
 import { todayInLagos } from '../common/access';
 import { DbService } from './db.service';
+import { seedAdmissions } from './seed-admissions';
 import { seedAiLearning } from './seed-ai';
 import { platformAdmins, schools, students } from './schema';
 
@@ -474,6 +476,9 @@ async function seedGcis(app: INestApplication, call: ReturnType<typeof client>, 
     rand,
   });
 
+  // ---- public website and online admissions (JSS 1 with a CBT entrance exam, Primary 1)
+  await seedAdmissions({ call, dbs, schoolId, owner, sectionId, subjectIds, rand });
+
   return { schoolId, students: Object.values(classes).reduce((n, c) => n + c.roster.length, 0) };
 }
 
@@ -501,6 +506,7 @@ async function seedSecondSchool(app: INestApplication, call: ReturnType<typeof c
 async function seed() {
   // Seeding never texts anyone, even when a Termii key is set: messages are only logged.
   process.env.MESSAGING_PROVIDER = 'log';
+  process.env.EMAIL_PROVIDER = 'log';
   const app = await NestFactory.create(AppModule, { logger: ['error'] });
   configureApp(app);
   await app.listen(0);
@@ -521,6 +527,7 @@ async function seed() {
         'Parent       school "gcis-demo", phone 0803 123 4567 (the code is shown on screen while no SMS key is set)',
         `Student      school "gcis-demo", admission number GCIS/S/001 (SS 2, JAMB and WAEC prep), GCIS/T/001 (SS 3), GCIS/J/001 (JSS 3, BECE), PIN ${DEMO_PIN}`,
         'Super admin  super@linxschool.test / demo-password',
+        'Website      /s/gcis-demo (admissions open for JSS 1 with a CBT entrance exam, and Primary 1)',
       ].join('\n'),
     );
   } finally {
