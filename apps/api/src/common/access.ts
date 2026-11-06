@@ -23,3 +23,17 @@ export async function assertTeachesClass(tx: Tx, user: Principal, classId: strin
 export function todayInLagos(): string {
   return new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 10);
 }
+
+/** Leadership, or a teacher assigned to this subject in this class. */
+export async function assertTeachesSubject(tx: Tx, user: Principal, classId: string, subjectId: string) {
+  const [cls] = await tx.select().from(classes).where(eq(classes.id, classId));
+  found(cls, 'Class');
+  const [link] = await tx
+    .select({ id: classSubjects.id, teacherId: classSubjects.teacherId })
+    .from(classSubjects)
+    .where(and(eq(classSubjects.classId, classId), eq(classSubjects.subjectId, subjectId)))
+    .limit(1);
+  if (!link) throw new ForbiddenException('This class does not take that subject');
+  if (user.role === 'teacher' && link.teacherId !== user.staffId) throw new ForbiddenException('You do not teach this subject in this class');
+  return cls;
+}

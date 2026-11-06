@@ -20,6 +20,9 @@ const FEATURE: Record<string, string> = {
   report_comment: "Report card remarks",
   kb_answer: "Knowledge base answers",
   kb_transcribe: "Reading scans and photos",
+  lesson_draft: "Lesson notes and plans",
+  assessment_draft: "Tests and marking schemes",
+  essay_marking: "Marking written answers",
 };
 
 const naira = (n: number) => `₦${n.toLocaleString("en-NG")}`;

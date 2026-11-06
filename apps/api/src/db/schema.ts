@@ -13,7 +13,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import type { AssessmentComponent, GradingScale, OutlineEntry } from '@school-ms/core';
+import type { AssessmentComponent, GradingScale, MarkSuggestion, OutlineEntry, RubricPoint } from '@school-ms/core';
 
 /**
  * Every table except `schools` carries school_id and is protected by a Postgres
@@ -579,7 +579,7 @@ export const aiUsage = pgTable(
 
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' });
 
-export const kbKind = pgEnum('kb_kind', ['scheme_of_work', 'lesson_note', 'past_questions', 'textbook', 'marking_scheme', 'other']);
+export const kbKind = pgEnum('kb_kind', ['scheme_of_work', 'lesson_note', 'lesson_plan', 'past_questions', 'textbook', 'marking_scheme', 'other']);
 /** processing: being read; ready: searchable; needs_ai: a scan or photo waiting for AI to read it; failed: could not be read. */
 export const kbStatus = pgEnum('kb_status', ['processing', 'ready', 'needs_ai', 'failed']);
 
@@ -723,6 +723,59 @@ export const examGoals = pgTable(
   (t) => [uniqueIndex('exam_goal_student_exam').on(t.studentId, t.exam)],
 );
 
+// ---------------------------------------------------------------- Teacher assistant: essay and theory marking
+
+/** A written question a teacher marks against a rubric, for one class and subject. */
+export const essayTasks = pgTable(
+  'essay_tasks',
+  {
+    id: id(),
+    schoolId: schoolId(),
+    classId: uuid('class_id')
+      .notNull()
+      .references(() => classes.id, { onDelete: 'cascade' }),
+    subjectId: uuid('subject_id')
+      .notNull()
+      .references(() => subjects.id, { onDelete: 'cascade' }),
+    /** The term and score component (e.g. ca2) confirmed marks can be sent to. */
+    termId: uuid('term_id').references(() => terms.id, { onDelete: 'set null' }),
+    scoreComponent: text('score_component'),
+    title: text('title').notNull(),
+    question: text('question').notNull(),
+    rubric: jsonb('rubric').$type<RubricPoint[]>().notNull(),
+    maxMarks: doublePrecision('max_marks').notNull(),
+    createdBy: uuid('created_by').references(() => staff.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('essay_tasks_class').on(t.schoolId, t.classId)],
+);
+
+export const essayScriptStatus = pgEnum('essay_script_status', ['suggested', 'confirmed']);
+
+/** One student's answer to an essay task, the suggested marks, and the teacher's final mark. */
+export const essayScripts = pgTable(
+  'essay_scripts',
+  {
+    id: id(),
+    schoolId: schoolId(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => essayTasks.id, { onDelete: 'cascade' }),
+    studentId: uuid('student_id')
+      .notNull()
+      .references(() => students.id, { onDelete: 'cascade' }),
+    answer: text('answer').notNull(),
+    /** ai: marked by Claude; keywords: the rough stand-in used without AI. */
+    suggestion: jsonb('suggestion').$type<MarkSuggestion & { source: 'ai' | 'keywords' }>(),
+    awarded: doublePrecision('awarded'),
+    teacherNote: text('teacher_note'),
+    status: essayScriptStatus('status').notNull().default('suggested'),
+    markedBy: uuid('marked_by').references(() => staff.id, { onDelete: 'set null' }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('essay_script_task_student').on(t.taskId, t.studentId)],
+);
+
 export const tenantTables = [
   'staff',
   'sections',
@@ -757,6 +810,8 @@ export const tenantTables = [
   'tutor_conversations',
   'tutor_messages',
   'exam_goals',
+  'essay_tasks',
+  'essay_scripts',
 ] as const;
 
 /**

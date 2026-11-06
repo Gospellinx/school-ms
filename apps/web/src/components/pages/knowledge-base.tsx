@@ -16,6 +16,7 @@ import type { KbAnswer, KbDocument, KbKind, SchoolClass, Subject } from "@/lib/t
 export const KIND_LABEL: Record<KbKind, string> = {
   scheme_of_work: "Scheme of work",
   lesson_note: "Lesson note",
+  lesson_plan: "Lesson plan",
   past_questions: "Past questions",
   textbook: "Textbook",
   marking_scheme: "Marking scheme",

@@ -91,17 +91,65 @@ questions, a marking scheme and a photo waiting for AI; JAMB and WAEC goals and 
 Chiamaka Okafor (SS 2, `GCIS/S/001`), tutor chats, a safeguarding flag from an SS 3 student
 (`GCIS/T/001`), and a BECE goal for a JSS 3 student (`GCIS/J/001`). Student PIN: `123456`.
 
-## Phase 2: teacher assistant
+## Phase 2 (built): teacher assistant
 
-- Lesson notes and lesson plans for a week of the scheme of work, in the school's own format, from
-  the knowledge base. Teachers edit and save them back into the knowledge base.
-- Class tests, exam questions (objective and theory) and marking schemes from a scheme-of-work
-  topic, saved to the question bank for review. (AI question drafts already exist.)
-- Essay and theory marking against a rubric or marking scheme: suggested marks per point with the
-  reason, which the teacher accepts or changes before it reaches the score sheet.
-- Report card remarks for a whole class at once (one at a time exists today).
-- "Falling behind" alerts for form teachers: drops since last term, below the credit line, missed
-  CBT tests and low practice activity.
+Teachers open **Teaching Assistant** in the teacher portal, pick one of their classes and subjects,
+and get five tabs. Every route checks that the teacher teaches that subject in that class
+(leadership can use any class).
+
+### Lesson notes and plans
+- Pick a week of the scheme of work (or type a topic). The draft follows the school's own scheme,
+  notes and textbook extracts, and cites them. Drafts never quote earlier saved plans, past
+  questions or marking schemes.
+- Edit, then save back into the knowledge base: a lesson note (students can see it) or a lesson
+  plan (staff only, new `lesson_plan` kind).
+- Without a key: a fill-in template built from the scheme of work and the school's notes.
+
+### Tests and exams
+- Pick a topic, the number of objective and theory questions, and the difficulty. Questions come
+  from the school's question bank first; Claude writes the rest with a marking scheme for theory.
+- Save new objective questions to the question bank, the paper to the knowledge base (staff only),
+  and the marking scheme. A theory question opens straight into marking with its rubric.
+- Without a key: only bank questions, and the screen says so.
+
+### Mark answers
+- An essay task holds the question, the rubric (typed as lines such as "Correct formula (2)"), the
+  term and the score column it feeds (for example 2nd CA). Tables `essay_tasks` and
+  `essay_scripts` (migration 0008, row-level security).
+- Type or paste each student's answer. Claude suggests marks per rubric point with a reason;
+  without a key, a keyword match does it, and a point with a wrong or missing number scores 0.
+- The teacher confirms every mark (and can change it). Only confirmed marks are pushed to the score
+  sheet, scaled to the column's maximum.
+
+### Report remarks
+- Drafts a teacher's remark (and a head's remark for leadership) for every student in the class at
+  once, from best and weakest subject, position and the trend since last term. Teachers edit, then
+  save one or all; they appear on the report cards.
+- Refuses to draft until at least 80% of score rows have every column, so remarks are not written
+  from CA scores alone. The screen offers the previous term instead.
+- Without a key: varied template remarks from the same facts.
+
+### Students to watch
+- For the class's current term: average so far against last term (a drop of 10 or more points),
+  subjects below the pass line (50 in senior secondary, 40 below), attendance under 85%, missed CBT
+  tests, low exam readiness and no practice or tutor activity in 14 days.
+- Urgent when there are two serious reasons or three or more failing subjects; "watch" otherwise.
+
+### Demo data
+`pnpm db:seed` adds, for Mr. Bakare (`teacher@demo.test`, SS 2 Gold Mathematics): a saved
+"Logarithms" lesson plan and the essay task "Logarithms theory (2nd CA)" with four answers, two
+already confirmed.
+
+### API
+| Method | Route |
+| --- | --- |
+| GET | `/assistant/context?classId&subjectId` |
+| POST | `/assistant/lesson`, `/assistant/assessment`, `/assistant/save` |
+| GET, POST | `/assistant/essays` |
+| GET, DELETE | `/assistant/essays/:id` |
+| PUT, PATCH | `/assistant/essays/:id/scripts/:studentId` (PUT enters an answer and suggests marks, PATCH confirms) |
+| POST | `/assistant/essays/:id/push-scores`, `/assistant/remarks` |
+| GET | `/assistant/watchlist?classId` |
 
 ## Phase 3: insights
 
