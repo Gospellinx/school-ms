@@ -32,6 +32,8 @@ export interface SearchFilters {
   termNumber?: number | null;
   /** Students only see documents marked visible to them, never marking schemes. */
   studentsOnly?: boolean;
+  /** Kinds to leave out, e.g. lesson plans when drafting a new one, so drafts do not quote drafts. */
+  excludeKinds?: string[];
   limit?: number;
 }
 
@@ -331,6 +333,7 @@ export class KnowledgeService {
         ${f.subjectId ? sql`and (d.subject_id = ${f.subjectId}::uuid or d.subject_id is null)` : sql``}
         ${f.classLevel ? sql`and (d.class_level is null or d.class_level = ${f.classLevel})` : sql``}
         ${f.studentsOnly ? sql`and d.visible_to_students and d.kind <> 'marking_scheme'` : sql``}
+        ${f.excludeKinds?.length ? sql`and d.kind::text not in (${sql.join(f.excludeKinds.map((k) => sql`${k}`), sql`, `)})` : sql``}
       order by rank desc
       limit ${f.limit ?? 6}
     `);

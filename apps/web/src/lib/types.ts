@@ -469,7 +469,7 @@ export const className = (c: { name: string; arm?: string | null }) => (c.arm ? 
 
 // ---------------------------------------------------------------- AI learning layer
 
-export type KbKind = 'scheme_of_work' | 'lesson_note' | 'past_questions' | 'textbook' | 'marking_scheme' | 'other';
+export type KbKind = 'scheme_of_work' | 'lesson_note' | 'lesson_plan' | 'past_questions' | 'textbook' | 'marking_scheme' | 'other';
 
 export interface KbDocument {
   id: string;
@@ -599,4 +599,113 @@ export interface AiOverview {
   byFeature: { feature: string; calls: number; costCents: number }[];
   tutorActivity: { conversations: number; students: number; messages: number };
   flags: { conversationId: string; studentId: string; student: string; admissionNumber: string; className: string; subject: string; category: string; message: string; at: string }[];
+}
+
+// ---------------------------------------------------------------- Teacher assistant
+
+export interface AssistantContext {
+  class: { id: string; name: string; arm: string };
+  subject: { id: string; name: string };
+  section: { kind: string; components: { key: string; label: string; maxScore: number }[] };
+  term: { id: string; name: string; number: number } | null;
+  outline: { week: number; topic: string; termNumber: number | null; source: string }[];
+  aiEnabled: boolean;
+}
+
+export interface LessonDraft {
+  title: string;
+  body: string;
+  citations: Citation[];
+  source: 'ai' | 'template';
+}
+
+export interface RubricPoint {
+  point: string;
+  marks: number;
+}
+
+export interface DraftObjective {
+  questionId: string | null;
+  topic: string;
+  body: string;
+  options: { key: string; text: string }[];
+  answer: string;
+  explanation: string;
+  source: 'bank' | 'ai';
+}
+
+export interface AssessmentDraft {
+  title: string;
+  objective: DraftObjective[];
+  theory: { topic: string; question: string; points: RubricPoint[] }[];
+  note: string | null;
+  source: 'ai' | 'bank';
+}
+
+export interface MarkSuggestion {
+  criteria: { point: string; marks: number; awarded: number; reason: string }[];
+  total: number;
+  max: number;
+  feedback: string;
+  source: 'ai' | 'keywords';
+}
+
+export interface EssayScript {
+  id: string;
+  studentId: string;
+  answer: string;
+  suggestion: MarkSuggestion | null;
+  awarded: number | null;
+  teacherNote: string | null;
+  status: 'suggested' | 'confirmed';
+}
+
+export interface EssayTaskSummary {
+  id: string;
+  classId: string;
+  subjectId: string;
+  title: string;
+  question: string;
+  maxMarks: number;
+  termId: string | null;
+  scoreComponent: string | null;
+  className: string;
+  subject: string;
+  scripts: number;
+  confirmed: number;
+  createdAt: string;
+}
+
+export interface EssayTask extends Omit<EssayTaskSummary, 'className' | 'scripts' | 'confirmed'> {
+  rubric: RubricPoint[];
+  aiEnabled: boolean;
+  students: { studentId: string; name: string; admissionNumber: string; script: EssayScript | null }[];
+}
+
+export interface ClassRemarks {
+  class: { id: string; name: string; arm: string };
+  source: 'ai' | 'template';
+  students: {
+    studentId: string;
+    name: string;
+    average: number;
+    position: string;
+    current: { teacherComment: string | null; headComment: string | null };
+    draft: { teacherComment: string; headComment: string };
+  }[];
+}
+
+export interface Watchlist {
+  class: { id: string; name: string; arm: string };
+  term: { id: string; name: string };
+  passMark: number;
+  counts: { high: number; medium: number; total: number };
+  students: {
+    studentId: string;
+    name: string;
+    admissionNumber: string;
+    level: 'high' | 'medium' | null;
+    average: number | null;
+    reasons: { code: string; serious: boolean; text: string }[];
+  }[];
 }

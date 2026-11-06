@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { AttendanceController } from './attendance/attendance.controller';
 import { AttendanceService } from './attendance/attendance.service';
+import { TeachingController } from './teaching/teaching.controller';
+import { TeachingService } from './teaching/teaching.service';
 import { AuthModule } from './auth/auth.module';
 import { PortalAuthController } from './auth/portal-auth.controller';
 import { PortalAuthService } from './auth/portal-auth.service';
@@ -57,6 +59,7 @@ import { TutorService } from './tutor/tutor.service';
     PlatformController,
     DashboardController,
     KnowledgeController,
+    TeachingController,
     TutorController,
     AiAdminController,
   ],
@@ -74,6 +77,7 @@ import { TutorService } from './tutor/tutor.service';
     PrepService,
     PortalResultsService,
     KnowledgeService,
+    TeachingService,
     TutorService,
     ExamPrepService,
   ],

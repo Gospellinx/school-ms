@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { buildStudyProfile, compatibleTags, ExamCode, pickPracticeQuestions, subjectTotal, SubjectTermResult, TopicStat } from '@school-ms/core';
+import { buildStudyProfile, compatibleTags, draftRemark, ExamCode, pickPracticeQuestions, subjectTotal, SubjectTermResult, TopicStat } from '@school-ms/core';
 import { and, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { Principal, StudentPrincipal } from '../auth/auth.types';
@@ -467,6 +467,18 @@ export class PrepService {
       subjects: card.subjects.map((s) => ({ subject: s.name, total: s.total, grade: s.grade })),
       attendance: card.attendance,
     };
+    // Without AI, a remark built from the results, so the button still helps.
+    if (!this.ai.enabled) {
+      return draftRemark({
+        key: studentId,
+        firstName: card.student.name.split(' ')[1] ?? card.student.name,
+        average: card.summary.average,
+        position: card.summary.position,
+        outOf: card.summary.outOf,
+        subjects: card.subjects.map((s) => ({ name: s.name, total: s.total })),
+        attendance: card.attendance ? { present: card.attendance.present + card.attendance.late, opened: card.attendance.opened } : null,
+      });
+    }
     return this.ai.json({
       feature: 'report_comment',
       schoolId: user.schoolId,
