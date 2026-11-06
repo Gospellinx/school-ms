@@ -43,6 +43,20 @@
       "when": 1793952832382,
       "tag": "0005_platform_admins",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793956468060,
+      "tag": "0006_ai_learning",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793956475607,
+      "tag": "0007_ai_learning_search_rls",
+      "breakpoints": true
     }
   ]
 }

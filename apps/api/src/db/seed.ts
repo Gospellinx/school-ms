@@ -17,6 +17,7 @@ import type { INestApplication } from '@nestjs/common';
 import bcrypt from 'bcryptjs';
 import { eq, inArray } from 'drizzle-orm';
 import { AppModule } from '../app.module';
+import { configureApp } from '../app.setup';
 import { todayInLagos } from '../common/access';
 import { DbService } from './db.service';
 import { platformAdmins, schools, students } from './schema';
@@ -486,7 +487,7 @@ async function seed() {
   // Seeding never texts anyone, even when a Termii key is set: messages are only logged.
   process.env.MESSAGING_PROVIDER = 'log';
   const app = await NestFactory.create(AppModule, { logger: ['error'] });
-  app.setGlobalPrefix('api');
+  configureApp(app);
   await app.listen(0);
   const { port } = app.getHttpServer().address() as { port: number };
   const call = client(`http://127.0.0.1:${port}`);

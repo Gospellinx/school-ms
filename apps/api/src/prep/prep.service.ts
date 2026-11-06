@@ -1,16 +1,14 @@
-import { BadRequestException, HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import { buildStudyProfile, pickPracticeQuestions, subjectTotal, SubjectTermResult, TopicStat } from '@school-ms/core';
-import { and, desc, eq, gte, inArray, isNotNull, ne, sql } from 'drizzle-orm';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { buildStudyProfile, compatibleTags, ExamCode, pickPracticeQuestions, subjectTotal, SubjectTermResult, TopicStat } from '@school-ms/core';
+import { and, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { Principal, StudentPrincipal } from '../auth/auth.types';
-import { config } from '../common/config';
 import { assertOwned } from '../common/owned';
 import { found } from '../common/validation';
 import { Tx } from '../db/client';
 import { DbService } from '../db/db.service';
 import {
   academicSessions,
-  aiUsage,
   cbtAttempts,
   cbtTestQuestions,
   cbtTests,
@@ -23,6 +21,8 @@ import {
   subjects,
   terms,
   resultPublications,
+  tutorConversations,
+  tutorMessages,
 } from '../db/schema';
 import { CbtService } from '../cbt/cbt.service';
 import { ResultsService } from '../results/results.service';
@@ -216,7 +216,7 @@ export class PrepService {
     };
   }
 
-  private async topicStats(tx: Tx, studentId: string): Promise<TopicStat[]> {
+  async topicStats(tx: Tx, studentId: string): Promise<TopicStat[]> {
     const attempts = await tx
       .select()
       .from(cbtAttempts)
@@ -237,17 +237,20 @@ export class PrepService {
         stats.set(key, s);
       }
     }
-    return [...stats.values()];
-  }
-
-  private async assertUnderLimit(tx: Tx, studentId: string) {
-    const [{ n }] = await tx
-      .select({ n: sql<number>`count(*)::int` })
-      .from(aiUsage)
-      .where(and(eq(aiUsage.studentId, studentId), gte(aiUsage.createdAt, sql`now() - interval '1 day'`)));
-    if (n >= config.ai().dailyLimitPerStudent) {
-      throw new HttpException('You have used today’s AI tutor allowance. Try again tomorrow.', HttpStatus.TOO_MANY_REQUESTS);
+    // Quiz questions answered in the tutor count too, under the conversation's topic.
+    const quizzes = await tx
+      .select({ subjectId: tutorConversations.subjectId, topic: tutorConversations.topic, correct: tutorMessages.quizCorrect })
+      .from(tutorMessages)
+      .innerJoin(tutorConversations, eq(tutorConversations.id, tutorMessages.conversationId))
+      .where(and(eq(tutorConversations.studentId, studentId), isNotNull(tutorMessages.quizAnswer), isNotNull(tutorConversations.topic)));
+    for (const qz of quizzes) {
+      const key = `${qz.subjectId}::${qz.topic}`;
+      const s = stats.get(key) ?? { subjectId: qz.subjectId, topic: qz.topic!, attempted: 0, correct: 0 };
+      s.attempted++;
+      if (qz.correct) s.correct++;
+      stats.set(key, s);
     }
+    return [...stats.values()];
   }
 
   /**
@@ -257,7 +260,7 @@ export class PrepService {
   async plan(schoolId: string, studentId: string, opts: { withAi: boolean }) {
     const profile = await this.dbs.withSchool(schoolId, async (tx) => {
       const p = await this.profileFor(tx, studentId);
-      if (opts.withAi && this.ai.enabled) await this.assertUnderLimit(tx, studentId);
+      if (opts.withAi && this.ai.enabled) await this.ai.assertStudentAllowance(tx, schoolId, studentId);
       return p;
     });
     if (!opts.withAi || !this.ai.enabled || profile.subjects.length === 0) return { profile, plan: null };
@@ -290,7 +293,7 @@ export class PrepService {
   // ------------------------------------------------------------ Practice
 
   /** Questions in tests that are not closed yet are kept out of practice, so tests are not leaked. */
-  private async reservedQuestionIds(tx: Tx): Promise<Set<string>> {
+  async reservedQuestionIds(tx: Tx): Promise<Set<string>> {
     const rows = await tx
       .select({ id: cbtTestQuestions.questionId })
       .from(cbtTestQuestions)
@@ -300,11 +303,17 @@ export class PrepService {
   }
 
   /** Builds a practice set aimed at the student's weakest topics, from the school's question bank. */
-  practice(student: StudentPrincipal, opts: { subjectId?: string; count: number }) {
+  practice(student: StudentPrincipal, opts: { subjectId?: string; topic?: string; exam?: ExamCode; count: number }) {
     return this.dbs.withSchool(student.schoolId, async (tx) => {
       const profile = await this.profileFor(tx, student.studentId);
       const reserved = await this.reservedQuestionIds(tx);
-      const suits = (q: typeof questions.$inferSelect) => !reserved.has(q.id) && (!q.sectionKind || q.sectionKind === profile.sectionKind);
+      const tags = opts.exam ? new Set(compatibleTags(opts.exam)) : null;
+      const topic = opts.topic?.trim().toLowerCase();
+      const suits = (q: typeof questions.$inferSelect) =>
+        !reserved.has(q.id) &&
+        (!q.sectionKind || q.sectionKind === profile.sectionKind) &&
+        (!tags || tags.has(q.exam)) &&
+        (!topic || q.topic.toLowerCase() === topic);
 
       let subjectId = opts.subjectId;
       let pool: (typeof questions.$inferSelect)[] = [];
@@ -320,7 +329,7 @@ export class PrepService {
           }
         }
       }
-      if (!subjectId || pool.length === 0) throw new BadRequestException('There are no practice questions for this subject yet');
+      if (!subjectId || pool.length === 0) throw new BadRequestException(topic ? 'There are no practice questions on this topic yet' : 'There are no practice questions for this subject yet');
 
       const focus = profile.subjects.find((s) => s.subjectId === subjectId);
       const past = await tx
@@ -330,12 +339,12 @@ export class PrepService {
       const answerKey = new Map(pool.map((q) => [q.id, q.answer]));
       const mastered = new Set(past.flatMap((a) => Object.entries(a.answers).filter(([qid, k]) => answerKey.get(qid) === k).map(([qid]) => qid)));
       const picked = pickPracticeQuestions(pool, {
-        weakTopics: focus?.weakTopics.map((t) => t.topic) ?? [],
+        weakTopics: topic ? [] : (focus?.weakTopics.map((t) => t.topic) ?? []),
         mastered,
         count: opts.count,
         seed: `${student.studentId}:${Date.now()}`,
       });
-      const attempt = await this.cbt.createPractice(tx, student, subjectId, picked);
+      const attempt = await this.cbt.createPractice(tx, student, subjectId, picked, opts.exam ?? null);
       return { ...attempt, focus: focus ? { subject: focus.subjectName, weakTopics: focus.weakTopics, reasons: focus.reasons } : null };
     });
   }
@@ -369,7 +378,7 @@ export class PrepService {
         .select()
         .from(questionExplanations)
         .where(and(eq(questionExplanations.questionId, questionId), eq(questionExplanations.chosenKey, chosen)));
-      if (!cached && this.ai.enabled) await this.assertUnderLimit(tx, student.studentId);
+      if (!cached && this.ai.enabled) await this.ai.assertStudentAllowance(tx, student.schoolId, student.studentId);
       const [subject] = await tx.select().from(subjects).where(eq(subjects.id, q.subjectId));
       return { q, chosen, cached, subject: subject.name };
     });
