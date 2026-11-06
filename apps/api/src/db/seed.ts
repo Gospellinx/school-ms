@@ -20,6 +20,7 @@ import { AppModule } from '../app.module';
 import { configureApp } from '../app.setup';
 import { todayInLagos } from '../common/access';
 import { DbService } from './db.service';
+import { seedAiLearning } from './seed-ai';
 import { platformAdmins, schools, students } from './schema';
 
 export const DEMO_PASSWORD = 'demo-password';
@@ -193,7 +194,7 @@ async function setPins(dbs: DbService, schoolId: string) {
   await dbs.withSchool(schoolId, (tx) => tx.update(students).set({ pinHash }));
 }
 
-async function seedGcis(app: INestApplication, call: ReturnType<typeof client>) {
+async function seedGcis(app: INestApplication, call: ReturnType<typeof client>, base: string) {
   const dbs = app.get(DbService);
   const today = todayInLagos();
   const cal = calendar(today);
@@ -459,6 +460,20 @@ async function seedGcis(app: INestApplication, call: ReturnType<typeof client>) 
   });
   await call(owner, 'POST', 'notifications/dispatch');
 
+  // ---- AI learning layer: exam bank, knowledge base, goals, mocks and tutor chats
+  await seedAiLearning({
+    base,
+    call,
+    owner,
+    tokens: teacherTokens,
+    subjectIds,
+    chiamaka: classes.s2.roster[0].admission,
+    ss3Student: classes.s3.roster[0].admission,
+    jss3Student: classes.j3.roster[0].admission,
+    pin: DEMO_PIN,
+    rand,
+  });
+
   return { schoolId, students: Object.values(classes).reduce((n, c) => n + c.roster.length, 0) };
 }
 
@@ -490,12 +505,13 @@ async function seed() {
   configureApp(app);
   await app.listen(0);
   const { port } = app.getHttpServer().address() as { port: number };
-  const call = client(`http://127.0.0.1:${port}`);
+  const base = `http://127.0.0.1:${port}`;
+  const call = client(base);
   try {
     const dbs = app.get(DbService);
     await resetDemo(dbs);
     await seedPlatform(dbs);
-    const gcis = await seedGcis(app, call);
+    const gcis = await seedGcis(app, call, base);
     await seedSecondSchool(app, call);
     console.log(
       [
@@ -503,7 +519,7 @@ async function seed() {
         '',
         'Staff        school "gcis-demo": proprietor@demo.test, admin@demo.test, teacher@demo.test (password demo-password)',
         'Parent       school "gcis-demo", phone 0803 123 4567 (the code is shown on screen while no SMS key is set)',
-        `Student      school "gcis-demo", admission number GCIS/S/001, PIN ${DEMO_PIN}`,
+        `Student      school "gcis-demo", admission number GCIS/S/001 (SS 2, JAMB and WAEC prep), GCIS/T/001 (SS 3), GCIS/J/001 (JSS 3, BECE), PIN ${DEMO_PIN}`,
         'Super admin  super@linxschool.test / demo-password',
       ].join('\n'),
     );
