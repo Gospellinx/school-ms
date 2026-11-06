@@ -1,4 +1,8 @@
 import { Module } from '@nestjs/common';
+import { AdmissionsController, PublicSchoolController } from './admissions/admissions.controller';
+import { AdmissionsService } from './admissions/admissions.service';
+import { EmailProvider, emailProviderFactory } from './email/email.provider';
+import { EmailService } from './email/email.service';
 import { AttendanceController } from './attendance/attendance.controller';
 import { AttendanceService } from './attendance/attendance.service';
 import { TeachingController } from './teaching/teaching.controller';
@@ -69,6 +73,8 @@ import { LiveService } from './live/live.service';
     InsightsController,
     ParentForecastController,
     LiveController,
+    AdmissionsController,
+    PublicSchoolController,
   ],
   providers: [
     ResultsService,
@@ -89,6 +95,9 @@ import { LiveService } from './live/live.service';
     ExamPrepService,
     InsightsService,
     LiveService,
+    { provide: EmailProvider, useFactory: emailProviderFactory },
+    EmailService,
+    AdmissionsService,
   ],
 })
 export class AppModule {}

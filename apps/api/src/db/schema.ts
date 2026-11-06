@@ -445,6 +445,8 @@ export const questions = pgTable(
 );
 
 export const cbtTestStatus = pgEnum('cbt_test_status', ['draft', 'published', 'closed']);
+/** class: a test for students in their classes; entrance: an admissions entrance exam sat by applicants. */
+export const cbtTestPurpose = pgEnum('cbt_test_purpose', ['class', 'entrance']);
 
 export const cbtTests = pgTable('cbt_tests', {
   id: id(),
@@ -458,6 +460,7 @@ export const cbtTests = pgTable('cbt_tests', {
   opensAt: timestamp('opens_at', { withTimezone: true }),
   closesAt: timestamp('closes_at', { withTimezone: true }),
   status: cbtTestStatus('status').notNull().default('draft'),
+  purpose: cbtTestPurpose('purpose').notNull().default('class'),
   shuffleQuestions: boolean('shuffle_questions').notNull().default(true),
   /** Show score and corrections to the student after submitting. */
   showResults: boolean('show_results').notNull().default(true),
@@ -776,6 +779,197 @@ export const essayScripts = pgTable(
   (t) => [uniqueIndex('essay_script_task_student').on(t.taskId, t.studentId)],
 );
 
+// ---------------------------------------------------------------- School website and admissions
+
+export interface SiteHighlight {
+  title: string;
+  text: string;
+}
+
+/** The school's public website: one row per school, edited by leadership, served at /s/<slug>. */
+export const schoolSites = pgTable('school_sites', {
+  id: id(),
+  schoolId: schoolId().unique(),
+  published: boolean('published').notNull().default(false),
+  tagline: text('tagline'),
+  about: text('about'),
+  heroImageUrl: text('hero_image_url'),
+  logoUrl: text('logo_url'),
+  /** Brand colour for the site, e.g. #1d4ed8. */
+  accentColor: text('accent_color'),
+  highlights: jsonb('highlights').$type<SiteHighlight[]>().notNull().default([]),
+  gallery: jsonb('gallery').$type<string[]>().notNull().default([]),
+  whatsapp: text('whatsapp'),
+  mapUrl: text('map_url'),
+  /** Admissions */
+  admissionsOpen: boolean('admissions_open').notNull().default(false),
+  admissionSession: text('admission_session'),
+  /** Application form fee in kobo. 0 means applying is free. */
+  applicationFeeKobo: integer('application_fee_kobo').notNull().default(0),
+  admissionInstructions: text('admission_instructions'),
+  /** Who gets an email when a new application arrives. */
+  admissionsEmail: text('admissions_email'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** A class applicants can apply into, with its entrance exam and pass mark. */
+export const admissionClasses = pgTable(
+  'admission_classes',
+  {
+    id: id(),
+    schoolId: schoolId(),
+    classId: uuid('class_id')
+      .notNull()
+      .references(() => classes.id, { onDelete: 'cascade' }),
+    /** Entrance exam (a CBT test with purpose 'entrance'); null means no exam for this class. */
+    entranceTestId: uuid('entrance_test_id').references(() => cbtTests.id, { onDelete: 'set null' }),
+    /** Percentage at or above which an applicant is recommended for an offer. */
+    passMark: integer('pass_mark'),
+    seats: integer('seats'),
+    open: boolean('open').notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('admission_class_unique').on(t.schoolId, t.classId)],
+);
+
+export const applicationStatus = pgEnum('application_status', [
+  'pending_payment',
+  'applied',
+  'exam',
+  'offered',
+  'accepted',
+  'enrolled',
+  'rejected',
+  'withdrawn',
+]);
+
+/** One child's application for admission, from the public form to enrolment. */
+export const applications = pgTable(
+  'applications',
+  {
+    id: id(),
+    schoolId: schoolId(),
+    /** Human reference the family quotes, e.g. ADM-2026-0007. */
+    reference: text('reference').notNull(),
+    admissionClassId: uuid('admission_class_id')
+      .notNull()
+      .references(() => admissionClasses.id, { onDelete: 'restrict' }),
+    classId: uuid('class_id')
+      .notNull()
+      .references(() => classes.id, { onDelete: 'restrict' }),
+    status: applicationStatus('status').notNull(),
+    firstName: text('first_name').notNull(),
+    lastName: text('last_name').notNull(),
+    otherNames: text('other_names'),
+    gender: gender('gender'),
+    dateOfBirth: date('date_of_birth'),
+    previousSchool: text('previous_school'),
+    parentName: text('parent_name').notNull(),
+    parentEmail: text('parent_email').notNull(),
+    /** International form, e.g. 2348031234567. */
+    parentPhone: text('parent_phone').notNull(),
+    relationship: text('relationship'),
+    address: text('address'),
+    notes: text('notes'),
+    /** Application fee */
+    feeKobo: integer('fee_kobo').notNull().default(0),
+    feeReference: text('fee_reference').unique(),
+    feePaidAt: timestamp('fee_paid_at', { withTimezone: true }),
+    feeMethod: text('fee_method'),
+    /** Entrance exam window for this applicant. */
+    examTestId: uuid('exam_test_id').references(() => cbtTests.id, { onDelete: 'set null' }),
+    examOpensAt: timestamp('exam_opens_at', { withTimezone: true }),
+    examClosesAt: timestamp('exam_closes_at', { withTimezone: true }),
+    examPercentage: doublePrecision('exam_percentage'),
+    /** Offer */
+    offerNote: text('offer_note'),
+    offeredAt: timestamp('offered_at', { withTimezone: true }),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+    decisionNote: text('decision_note'),
+    decidedBy: uuid('decided_by').references(() => staff.id, { onDelete: 'set null' }),
+    /** Enrolment */
+    studentId: uuid('student_id').references(() => students.id, { onDelete: 'set null' }),
+    enrolledAt: timestamp('enrolled_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('application_school_reference').on(t.schoolId, t.reference),
+    index('applications_status').on(t.schoolId, t.status, t.createdAt),
+  ],
+);
+
+/** Timeline of everything that happened to an application: the admissions activity feed. */
+export const applicationEvents = pgTable(
+  'application_events',
+  {
+    id: id(),
+    schoolId: schoolId(),
+    applicationId: uuid('application_id')
+      .notNull()
+      .references(() => applications.id, { onDelete: 'cascade' }),
+    /** e.g. submitted, fee_paid, exam_scheduled, exam_started, exam_submitted, offered, accepted, enrolled, rejected, email_sent, note */
+    kind: text('kind').notNull(),
+    detail: text('detail'),
+    staffId: uuid('staff_id').references(() => staff.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('application_events_recent').on(t.schoolId, t.createdAt), index('application_events_app').on(t.applicationId)],
+);
+
+/** An applicant's sitting of the entrance exam. Graded with the same CBT engine as student tests. */
+export const applicantExamAttempts = pgTable(
+  'applicant_exam_attempts',
+  {
+    id: id(),
+    schoolId: schoolId(),
+    applicationId: uuid('application_id')
+      .notNull()
+      .references(() => applications.id, { onDelete: 'cascade' }),
+    testId: uuid('test_id')
+      .notNull()
+      .references(() => cbtTests.id, { onDelete: 'cascade' }),
+    questionIds: jsonb('question_ids').$type<string[]>().notNull(),
+    answers: jsonb('answers').$type<Record<string, string>>().notNull().default({}),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    deadline: timestamp('deadline', { withTimezone: true }).notNull(),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
+    score: doublePrecision('score'),
+    maxScore: doublePrecision('max_score'),
+    percentage: doublePrecision('percentage'),
+  },
+  (t) => [uniqueIndex('applicant_attempt_unique').on(t.applicationId, t.testId)],
+);
+
+export const emailStatus = pgEnum('email_status', ['queued', 'sending', 'sent', 'failed', 'skipped']);
+
+/**
+ * Outbox of emails (admissions follow-ups). Rows can wait until `sendAfter`, and are skipped
+ * if the application has moved on from `onlyIfStatus` by then (e.g. the fee reminder after paying).
+ */
+export const emailOutbox = pgTable(
+  'email_outbox',
+  {
+    id: id(),
+    schoolId: schoolId(),
+    to: text('to').notNull(),
+    subject: text('subject').notNull(),
+    text: text('text').notNull(),
+    html: text('html').notNull(),
+    kind: text('kind').notNull(),
+    applicationId: uuid('application_id').references(() => applications.id, { onDelete: 'cascade' }),
+    onlyIfStatus: text('only_if_status'),
+    sendAfter: timestamp('send_after', { withTimezone: true }).notNull().defaultNow(),
+    status: emailStatus('status').notNull().default('queued'),
+    attempts: integer('attempts').notNull().default(0),
+    providerRef: text('provider_ref'),
+    error: text('error'),
+    createdAt: createdAt(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+  },
+  (t) => [index('email_outbox_due').on(t.status, t.sendAfter), index('email_outbox_application').on(t.applicationId)],
+);
+
 export const tenantTables = [
   'staff',
   'sections',
@@ -812,6 +1006,12 @@ export const tenantTables = [
   'exam_goals',
   'essay_tasks',
   'essay_scripts',
+  'school_sites',
+  'admission_classes',
+  'applications',
+  'application_events',
+  'applicant_exam_attempts',
+  'email_outbox',
 ] as const;
 
 /**

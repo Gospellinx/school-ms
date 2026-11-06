@@ -7,6 +7,14 @@ export const config = {
     senderId: process.env.TERMII_SENDER_ID ?? 'LinxSchool',
     baseUrl: process.env.TERMII_BASE_URL ?? 'https://api.ng.termii.com',
   }),
+  /** Email for admissions follow-ups. Resend (https://resend.com) when RESEND_API_KEY is set; otherwise only logged. */
+  email: () => ({
+    provider: process.env.EMAIL_PROVIDER ?? (process.env.RESEND_API_KEY ? 'resend' : 'log'),
+    resendApiKey: process.env.RESEND_API_KEY,
+    from: process.env.EMAIL_FROM ?? 'Linx School <admissions@linxschool.ng>',
+    /** How often the email outbox is checked for due follow-ups. 0 turns the worker off. */
+    pollMs: Number(process.env.EMAIL_POLL_MS ?? process.env.NOTIFICATIONS_POLL_MS ?? 15000),
+  }),
   /** How often the outbox worker sends queued SMS and WhatsApp messages. 0 turns the worker off. */
   notificationsPollMs: () => Number(process.env.NOTIFICATIONS_POLL_MS ?? 5000),
   paystack: () => ({

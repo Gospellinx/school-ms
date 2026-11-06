@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { Principal } from '../auth/auth.types';
 import { CurrentUser, LEADERSHIP, Public, Roles } from '../auth/decorators';
 import { parse, uuidParam } from '../common/validation';
+import { AdmissionsService } from '../admissions/admissions.service';
 import { FeesService } from './fees.service';
 import { PaystackClient } from './paystack.client';
 
@@ -54,6 +55,7 @@ export class FeesController {
   constructor(
     private readonly fees: FeesService,
     private readonly paystack: PaystackClient,
+    private readonly admissions: AdmissionsService,
   ) {}
 
   @Roles(...LEADERSHIP)
@@ -141,6 +143,9 @@ export class FeesController {
   @Post('webhooks/paystack')
   webhook(@Req() req: RawBodyRequest<{ body: unknown }>, @Headers('x-paystack-signature') signature?: string) {
     if (!this.paystack.isValidSignature(req.rawBody, signature)) throw new UnauthorizedException('Bad signature');
+    const event = req.body as Parameters<AdmissionsService['handleWebhook']>[0] & { data?: { metadata?: { purpose?: string } } };
+    // One Paystack account, one webhook: admission form fees are routed to admissions.
+    if (AdmissionsService.isAdmissionCharge(event)) return this.admissions.handleWebhook(event);
     return this.fees.handleWebhook(req.body as Parameters<FeesService['handleWebhook']>[0]);
   }
 }
