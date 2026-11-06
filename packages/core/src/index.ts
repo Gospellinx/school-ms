@@ -9,4 +9,5 @@ export * from './exams';
 export * from './knowledge';
 export * from './safety';
 export * from './teaching';
+export * from './forecast';
 export * from './autopilot';

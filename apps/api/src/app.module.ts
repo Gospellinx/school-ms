@@ -38,6 +38,10 @@ import { KnowledgeService } from './knowledge/knowledge.service';
 import { ExamPrepService } from './prep/exam-prep.service';
 import { TutorController } from './tutor/tutor.controller';
 import { TutorService } from './tutor/tutor.service';
+import { InsightsController, ParentForecastController } from './insights/insights.controller';
+import { InsightsService } from './insights/insights.service';
+import { LiveController } from './live/live.controller';
+import { LiveService } from './live/live.service';
 import { AutomationsService } from './autopilot/automations.service';
 import { AutopilotController } from './autopilot/autopilot.controller';
 import { PayLinksController } from './autopilot/pay-links.controller';
@@ -66,6 +70,9 @@ import { EmailProvider, emailProviderFactory } from './messaging/email.provider'
     TeachingController,
     TutorController,
     AiAdminController,
+    InsightsController,
+    ParentForecastController,
+    LiveController,
     AutopilotController,
     PayLinksController,
   ],
@@ -87,6 +94,8 @@ import { EmailProvider, emailProviderFactory } from './messaging/email.provider'
     TeachingService,
     TutorService,
     ExamPrepService,
+    InsightsService,
+    LiveService,
     AutomationsService,
   ],
 })

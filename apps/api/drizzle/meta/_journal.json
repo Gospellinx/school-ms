@@ -68,8 +68,15 @@
     {
       "idx": 9,
       "version": "7",
-      "when": 1793989696802,
-      "tag": "0009_fee_recovery_autopilot",
+      "when": 1794018000000,
+      "tag": "0009_live_monitoring",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793991062748,
+      "tag": "0010_fee_recovery_autopilot",
       "breakpoints": true
     }
   ]
