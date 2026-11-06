@@ -64,6 +64,13 @@
       "when": 1793978045880,
       "tag": "0008_teacher_assistant",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793989581900,
+      "tag": "0009_lesson_notes_vetting",
+      "breakpoints": true
     }
   ]
 }

@@ -606,6 +606,12 @@ export const kbDocuments = pgTable(
     outline: jsonb('outline').$type<OutlineEntry[]>().notNull().default([]),
     visibleToStudents: boolean('visible_to_students').notNull().default(true),
     uploadedBy: uuid('uploaded_by').references(() => staff.id, { onDelete: 'set null' }),
+    /** Week of term a lesson note or plan is for, so it lines up with the scheme of work. */
+    week: integer('week'),
+    /** The head of school or HOD who checked a lesson note or plan, as inspectors expect. */
+    vettedBy: uuid('vetted_by').references(() => staff.id, { onDelete: 'set null' }),
+    vettedAt: timestamp('vetted_at', { withTimezone: true }),
+    vetComment: text('vet_comment'),
     createdAt: createdAt(),
   },
   (t) => [index('kb_documents_subject').on(t.schoolId, t.subjectId)],

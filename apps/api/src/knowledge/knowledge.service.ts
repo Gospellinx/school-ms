@@ -21,6 +21,8 @@ export interface DocumentInput {
   subjectId?: string | null;
   classLevel?: string | null;
   termNumber?: number | null;
+  /** Week of term, for lesson notes and plans. */
+  week?: number | null;
   visibleToStudents?: boolean;
   fileName: string;
   mimeType?: string;
@@ -97,6 +99,7 @@ export class KnowledgeService {
           subjectId: input.subjectId ?? null,
           classLevel: input.classLevel?.trim() || null,
           termNumber: input.termNumber ?? null,
+          week: input.week ?? null,
           // Marking schemes are for staff unless the school says otherwise.
           visibleToStudents: input.visibleToStudents ?? input.kind !== 'marking_scheme',
           fileName: input.fileName,

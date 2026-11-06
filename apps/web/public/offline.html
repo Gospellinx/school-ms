@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en-NG">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#6a3bf0">
+<title>Offline · Linx School</title>
+<style>
+  body { margin: 0; min-height: 100dvh; display: flex; align-items: center; justify-content: center; background: #f4f4f6; color: #16151c; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 360px; margin: 16px; padding: 32px 24px; background: #fff; border-radius: 24px; text-align: center; }
+  img { width: 56px; height: 56px; }
+  h1 { font-size: 20px; margin: 16px 0 8px; }
+  p { color: #6b6a75; font-size: 14px; line-height: 1.5; margin: 0 0 20px; }
+  button { height: 44px; padding: 0 20px; border: 0; border-radius: 14px; background: #6a3bf0; color: #fff; font-weight: 600; font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <img src="/icons/icon-192.png" alt="">
+  <h1>You are offline</h1>
+  <p>This page has not been opened on this phone before, so there is no copy of it yet. Pages you opened while online, such as your score sheets and registers, still work offline.</p>
+  <button onclick="history.length > 1 ? history.back() : location.reload()">Go back</button>
+</main>
+</body>
+</html>

@@ -9,6 +9,8 @@ import { type Role } from "@/lib/roles";
 import { SessionContext, sessionUser, signOut, type SessionValue } from "@/lib/session";
 import { Logo } from "./logo";
 import { SidebarContent } from "./sidebar";
+import { OfflineBar } from "./offline-bar";
+import { setOutboxOwner } from "@/lib/offline";
 
 /** Where each portal finds out who is signed in. */
 const ME_PATH: Record<Role, string> = {
@@ -24,6 +26,8 @@ export function AppShell({ role, children }: { role: Role; children: React.React
   const pathname = usePathname();
   const { data: me, error } = useApi<SessionValue["me"]>(ME_PATH[role]);
   React.useEffect(() => setOpen(false), [pathname]);
+  const staffId = me && "staff" in me ? me.staff.id : null;
+  React.useEffect(() => setOutboxOwner(staffId), [staffId]);
   React.useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
   }, [open]);
@@ -78,7 +82,10 @@ export function AppShell({ role, children }: { role: Role; children: React.React
               <Bell className="h-5 w-5" />
             </span>
           </div>
-          <main className="px-4 pt-5 pb-16 sm:px-6 lg:px-8 lg:pt-2">{children}</main>
+          <main className="px-4 pt-5 pb-16 sm:px-6 lg:px-8 lg:pt-2">
+            {role === "teacher" || role === "admin" ? <OfflineBar /> : null}
+            {children}
+          </main>
         </div>
       </div>
     </SessionContext.Provider>

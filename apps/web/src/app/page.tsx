@@ -1,4 +1,5 @@
 "use client";
+import { clearOfflineData } from "@/lib/offline";
 import * as React from "react";
 import Link from "next/link";
 import { BookOpen, CheckCircle2, GraduationCap, HeartHandshake, ShieldCheck } from "lucide-react";
@@ -76,6 +77,8 @@ export default function SignIn() {
         if (sent.devCode) setValues((cur) => ({ ...cur, code: sent.devCode! }));
         return;
       } else res = await post("parent", { schoolSlug: school, phone: v("phone"), code: v("code").trim() });
+      // A new sign-in must not see offline copies of someone else's pages (queued changes stay with their owner).
+      await clearOfflineData({ outbox: false });
       window.location.href = res.home ?? "/";
     } catch (err) {
       setError((err as Error).message);
