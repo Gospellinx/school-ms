@@ -1,15 +1,19 @@
-import { Body, Controller, Get, Post, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, Patch, Post, UnauthorizedException } from '@nestjs/common';
 import bcrypt from 'bcryptjs';
 import { asc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { AuthService } from '../auth/auth.service';
 import { PlatformPrincipal } from '../auth/auth.types';
 import { CurrentUser, ForAudience, Public } from '../auth/decorators';
-import { parse } from '../common/validation';
+import { parse, uuidParam } from '../common/validation';
 import { DbService } from '../db/db.service';
 import { platformAdmins, schools } from '../db/schema';
 
 const loginSchema = z.object({ email: z.string().email(), password: z.string() });
+const aiLimitsSchema = z.object({
+  monthlyBudgetCents: z.number().int().min(0).max(10_000_000).optional(),
+  studentDailyLimit: z.number().int().min(0).max(500).nullable().optional(),
+});
 
 /** One row per school for the super admin. Counts only: no student names, scores or contact details. */
 export interface SchoolSummary {
@@ -103,5 +107,18 @@ export class PlatformController {
       });
     }
     return out;
+  }
+
+  /** Sets a school's AI limits: the monthly spending cap (US cents) and messages per student per day. */
+  @Patch('schools/:id/ai')
+  async setAiLimits(@Param('id') id: string, @Body() body: unknown) {
+    const input = parse(aiLimitsSchema, body);
+    const [school] = await this.dbs.db
+      .update(schools)
+      .set({ aiMonthlyBudgetCents: input.monthlyBudgetCents, aiStudentDailyLimit: input.studentDailyLimit })
+      .where(eq(schools.id, parse(uuidParam, id)))
+      .returning({ id: schools.id, aiMonthlyBudgetCents: schools.aiMonthlyBudgetCents, aiStudentDailyLimit: schools.aiStudentDailyLimit });
+    if (!school) throw new NotFoundException('School not found');
+    return school;
   }
 }

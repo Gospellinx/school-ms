@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { gradeAttempt, scaleToComponent, seededShuffle } from '@school-ms/core';
+import { EXAM_FORMATS, gradeAttempt, jambAggregate, scaleToComponent, seededShuffle, waecGrade } from '@school-ms/core';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { Principal, StudentPrincipal } from '../auth/auth.types';
 import { assertOwned } from '../common/owned';
@@ -359,10 +359,10 @@ export class CbtService {
     });
   }
 
-  async createPractice(tx: Tx, student: StudentPrincipal, subjectId: string, questionIds: string[]) {
+  async createPractice(tx: Tx, student: StudentPrincipal, subjectId: string, questionIds: string[], exam: Attempt['exam'] = null) {
     const [attempt] = await tx
       .insert(cbtAttempts)
-      .values({ schoolId: student.schoolId, kind: 'practice', studentId: student.studentId, subjectId, questionIds })
+      .values({ schoolId: student.schoolId, kind: 'practice', studentId: student.studentId, subjectId, questionIds, exam })
       .returning();
     return this.attemptView(tx, attempt);
   }
@@ -454,11 +454,12 @@ export class CbtService {
    * What the student sees. Answers and explanations appear only after submitting,
    * and for tests only if the teacher chose to show results.
    */
-  private async attemptView(tx: Tx, a: Attempt) {
+  async attemptView(tx: Tx, a: Attempt) {
     const qs = await tx.select().from(questions).where(inArray(questions.id, a.questionIds));
     const byId = new Map<string, Question>(qs.map((q) => [q.id, q]));
-    let showReview = a.kind === 'practice';
-    let title = 'Practice';
+    // Practice sets and mocks always show the review; tests only if the teacher allows it.
+    let showReview = a.kind !== 'test';
+    let title = a.mock ? `${EXAM_FORMATS[a.mock.exam].name} mock` : 'Practice';
     if (a.testId) {
       const [test] = await tx.select().from(cbtTests).where(eq(cbtTests.id, a.testId));
       showReview = test.showResults;
@@ -477,12 +478,15 @@ export class CbtService {
       secondsLeft: a.deadline && !submitted ? Math.max(0, Math.round((a.deadline.getTime() - Date.now()) / 1000)) : null,
       submitted,
       result: submitted && showReview ? { score: a.score, maxScore: a.maxScore, percentage: a.percentage } : null,
+      exam: a.exam,
+      mock: a.mock ? { ...a.mock, breakdown: reveal ? mockBreakdown(a, byId) : null } : null,
       questions: a.questionIds.map((qid, i) => {
         const q = byId.get(qid)!;
         const chosen = a.answers[qid] ?? null;
         return {
           number: i + 1,
           id: q.id,
+          subjectId: q.subjectId,
           topic: q.topic,
           body: q.body,
           options: q.options,
@@ -493,4 +497,16 @@ export class CbtService {
       }),
     };
   }
+}
+
+/** Score per subject for a mock (JAMB is marked out of 100 per subject and 400 in all). */
+export function mockBreakdown(a: Attempt, byId: Map<string, Question>) {
+  if (!a.mock) return null;
+  const subjects = a.mock.subjects.map((s) => {
+    const qs = a.questionIds.map((id) => byId.get(id)).filter((q): q is Question => Boolean(q) && q!.subjectId === s.subjectId);
+    const correct = qs.filter((q) => a.answers[q.id] === q.answer).length;
+    const percentage = qs.length ? Math.round((correct / qs.length) * 100) : 0;
+    return { subjectId: s.subjectId, name: s.name, questions: qs.length, correct, percentage, grade: waecGrade(percentage) };
+  });
+  return { subjects, jambScore: a.mock.exam === 'jamb' ? jambAggregate(subjects.map((s) => s.percentage)) : null };
 }

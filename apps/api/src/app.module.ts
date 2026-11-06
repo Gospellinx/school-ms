@@ -30,6 +30,12 @@ import { StudentsController } from './students/students.controller';
 
 import { PlatformController } from './platform/platform.controller';
 import { DashboardController } from './dashboard/dashboard.controller';
+import { AiAdminController } from './ai-admin/ai-admin.controller';
+import { KnowledgeController } from './knowledge/knowledge.controller';
+import { KnowledgeService } from './knowledge/knowledge.service';
+import { ExamPrepService } from './prep/exam-prep.service';
+import { TutorController } from './tutor/tutor.controller';
+import { TutorService } from './tutor/tutor.service';
 
 @Module({
   imports: [DbModule, AuthModule],
@@ -50,6 +56,9 @@ import { DashboardController } from './dashboard/dashboard.controller';
     StudentController,
     PlatformController,
     DashboardController,
+    KnowledgeController,
+    TutorController,
+    AiAdminController,
   ],
   providers: [
     ResultsService,
@@ -64,6 +73,9 @@ import { DashboardController } from './dashboard/dashboard.controller';
     AiService,
     PrepService,
     PortalResultsService,
+    KnowledgeService,
+    TutorService,
+    ExamPrepService,
   ],
 })
 export class AppModule {}

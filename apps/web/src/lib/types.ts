@@ -378,9 +378,18 @@ export interface StudentTest {
   attempt: { id: string; submitted: boolean; percentage: number | null } | null;
 }
 
+export type ExamCode = 'waec' | 'neco' | 'jamb' | 'bece';
+
+export interface MockBreakdown {
+  subjects: { subjectId: string; name: string; questions: number; correct: number; percentage: number; grade: string }[];
+  jambScore: number | null;
+}
+
 export interface Attempt {
   id: string;
-  kind: 'test' | 'practice';
+  kind: 'test' | 'practice' | 'mock';
+  exam?: ExamCode | null;
+  mock?: { exam: ExamCode; size: 'full' | 'short'; subjects: { subjectId: string; name: string; count: number }[]; breakdown: MockBreakdown | null } | null;
   title: string;
   subjectId: string;
   deadline: string | null;
@@ -390,6 +399,7 @@ export interface Attempt {
   questions: {
     number: number;
     id: string;
+    subjectId?: string;
     topic: string;
     body: string;
     options: { key: string; text: string }[];
@@ -456,3 +466,137 @@ export interface SchoolSummary {
 }
 
 export const className = (c: { name: string; arm?: string | null }) => (c.arm ? `${c.name} ${c.arm}` : c.name);
+
+// ---------------------------------------------------------------- AI learning layer
+
+export type KbKind = 'scheme_of_work' | 'lesson_note' | 'past_questions' | 'textbook' | 'marking_scheme' | 'other';
+
+export interface KbDocument {
+  id: string;
+  title: string;
+  kind: KbKind;
+  subjectId: string | null;
+  subject: string | null;
+  classLevel: string | null;
+  termNumber: number | null;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  status: 'processing' | 'ready' | 'needs_ai' | 'failed';
+  error: string | null;
+  chunkCount: number;
+  outlineWeeks: number;
+  visibleToStudents: boolean;
+  uploadedBy: string | null;
+  createdAt: string;
+}
+
+export interface Citation {
+  documentId: string;
+  title: string;
+  locator: string | null;
+  kind: string;
+}
+
+export interface KbAnswer {
+  answer: string;
+  passages: (Citation & { n: number; excerpt: string })[];
+  citations: Citation[];
+  coveredByMaterial: boolean;
+  source: 'search' | 'ai';
+}
+
+export interface TutorMessage {
+  id: string;
+  role: 'student' | 'tutor';
+  intent: string | null;
+  content: string;
+  citations: Citation[];
+  source: 'ai' | 'offline' | 'safety';
+  createdAt: string;
+  quiz: {
+    question: string;
+    options: { key: string; text: string }[];
+    chosen: string | null;
+    answer?: string;
+    correct?: boolean | null;
+    explanation?: string;
+  } | null;
+}
+
+export interface TutorConversationSummary {
+  id: string;
+  title: string;
+  topic: string | null;
+  subjectId: string;
+  subject: string;
+  updatedAt: string;
+}
+
+export interface TutorConversation extends TutorConversationSummary {
+  aiEnabled: boolean;
+  messages: TutorMessage[];
+}
+
+export interface TutorTopics {
+  currentTerm: number | null;
+  schemeOfWork: { week: number; topic: string; termNumber: number | null; source: string }[];
+  bankTopics: string[];
+}
+
+export interface ExamOverview {
+  student: { id: string; name: string; className: string | null };
+  sectionKind: string;
+  today: string;
+  exams: {
+    code: ExamCode;
+    name: string;
+    subjectsPerSitting: number;
+    fullMock: { questions: number; minutes: number };
+    compulsorySubjectCodes: string[];
+    goal: { examDate: string; subjectIds: string[] } | null;
+    suggestedDate: string;
+    questionsBySubject: Record<string, number>;
+  }[];
+  subjects: { id: string; name: string; code: string }[];
+  recentMocks: { id: string; exam: ExamCode | null; submittedAt: string; percentage: number | null; subjects: string[] }[];
+}
+
+export interface ExamTopic {
+  topic: string;
+  questions: number;
+  inSchemeOfWork: boolean;
+  attempted: number;
+  accuracy: number | null;
+}
+
+export type ReadinessBand = 'on_track' | 'borderline' | 'at_risk' | 'unknown';
+
+export interface ExamPlan {
+  exam: ExamCode;
+  examName: string;
+  hasGoal: boolean;
+  readiness: {
+    subjects: { subjectId: string; subjectName: string; predicted: number | null; grade: string | null; band: ReadinessBand; confidence: 'low' | 'medium' | 'high' }[];
+    overall: number | null;
+    band: ReadinessBand;
+    jambAggregate: number | null;
+    creditsLikely: number;
+  };
+  countdown: {
+    examDate: string;
+    daysLeft: number;
+    weeks: { week: number; startsOn: string; mock: boolean; focus: { subjectId: string; subject: string; topic: string; kind: 'fix' | 'cover' | 'revise' }[] }[];
+  };
+}
+
+export interface AiOverview {
+  enabled: boolean;
+  model: string;
+  tutorModel: string;
+  budget: { spentCents: number; capCents: number; remainingCents: number; spentNaira: number; capNaira: number; usdToNgn: number };
+  studentDailyLimit: number;
+  byFeature: { feature: string; calls: number; costCents: number }[];
+  tutorActivity: { conversations: number; students: number; messages: number };
+  flags: { conversationId: string; studentId: string; student: string; admissionNumber: string; className: string; subject: string; category: string; message: string; at: string }[];
+}

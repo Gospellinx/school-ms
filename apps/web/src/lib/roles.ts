@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, School, CreditCard, Library, LifeBuoy, Settings, Users, GraduationCap, BookOpen,
-  ClipboardList, CalendarCheck, Wallet, MessageSquare, FileText, Sparkles, MonitorCheck, CalendarDays,
-  UserCog, BarChart3, type LucideIcon,
+  ClipboardList, CalendarCheck, Wallet, MessageSquare, FileText, MonitorCheck, CalendarDays,
+  UserCog, BarChart3, Bot, ShieldCheck, Target, type LucideIcon,
 } from "lucide-react";
 
 export type Role = "super-admin" | "admin" | "teacher" | "student" | "parent";
@@ -43,6 +43,8 @@ export const roles: Record<Role, RoleConfig> = {
       { label: "Attendance", href: "/admin/attendance", icon: CalendarCheck },
       { label: "Fees", href: "/admin/fees", icon: Wallet },
       { label: "Messages", href: "/admin/messages", icon: MessageSquare },
+      { label: "Knowledge Base", href: "/admin/knowledge", icon: Library },
+      { label: "AI Usage & Safety", href: "/admin/ai", icon: ShieldCheck },
     ],
   },
   teacher: {
@@ -54,6 +56,7 @@ export const roles: Record<Role, RoleConfig> = {
       { label: "Score Entry", href: "/teacher/scores", icon: ClipboardList },
       { label: "Attendance", href: "/teacher/attendance", icon: CalendarCheck },
       { label: "CBT Tests", href: "/teacher/cbt", icon: MonitorCheck },
+      { label: "Knowledge Base", href: "/teacher/knowledge", icon: Library },
       { label: "Timetable", href: "/teacher/timetable", icon: CalendarDays },
     ],
   },
@@ -63,7 +66,8 @@ export const roles: Record<Role, RoleConfig> = {
     menu: [
       { label: "Dashboard", href: "/student", icon: LayoutDashboard },
       { label: "My Subjects", href: "/student/subjects", icon: BookOpen },
-      { label: "AI Exam Prep", href: "/student/prep", icon: Sparkles },
+      { label: "AI Tutor", href: "/student/tutor", icon: Bot },
+      { label: "Exam Prep", href: "/student/prep", icon: Target },
       { label: "CBT Tests", href: "/student/cbt", icon: MonitorCheck },
       { label: "My Results", href: "/student/results", icon: FileText },
       { label: "Timetable", href: "/student/timetable", icon: CalendarDays },

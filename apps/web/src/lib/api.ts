@@ -38,6 +38,18 @@ export async function api<T = unknown>(path: string, init?: { method?: string; b
   return body as T;
 }
 
+/** Sends a file as the raw request body (no base64), with its details in the query string. */
+export async function apiUpload<T = unknown>(path: string, file: Blob, query: Record<string, string | number | boolean | undefined | null>): Promise<T> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(query)) if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+  const res = await fetch(`/bff/${path.replace(/^\//, '')}?${qs}`, { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: file });
+  const text = await res.text();
+  const body = text ? JSON.parse(text) : null;
+  if (res.status === 401 && typeof window !== 'undefined') window.location.href = '/';
+  if (!res.ok) throw new ApiError(messageFrom(body, `Upload failed (${res.status})`), res.status, body);
+  return body as T;
+}
+
 /** Loads `path` (skipped while null) and exposes the data, error and a reload function. */
 export function useApi<T>(path: string | null) {
   const [data, setData] = useState<T | null>(null);

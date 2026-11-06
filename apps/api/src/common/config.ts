@@ -21,6 +21,29 @@ export const config = {
   ai: () => ({
     apiKey: process.env.ANTHROPIC_API_KEY,
     model: process.env.AI_MODEL ?? 'claude-opus-5-5',
+    /** Model for the student tutor chat, the busiest feature. Defaults to AI_MODEL. */
+    tutorModel: process.env.AI_TUTOR_MODEL ?? process.env.AI_MODEL ?? 'claude-opus-5-5',
     dailyLimitPerStudent: Number(process.env.AI_DAILY_LIMIT_PER_STUDENT ?? 30),
   }),
+  /** Largest file a teacher can add to the knowledge base. */
+  kbMaxUploadBytes: () => Number(process.env.KB_MAX_UPLOAD_MB ?? 15) * 1024 * 1024,
+  /** Naira per US dollar, only for showing AI spend in naira. */
+  usdToNgn: () => Number(process.env.USD_NGN_RATE ?? 1500),
 };
+
+/** List prices in US dollars per million tokens (input, output). Unknown models are priced as Opus. */
+const PRICES: [prefix: string, input: number, output: number][] = [
+  ['claude-fable-5', 10, 50],
+  ['claude-opus-5-5', 4, 20],
+  ['claude-opus', 5, 25],
+  ['claude-sonnet-5', 2, 10],
+  ['claude-sonnet', 3, 15],
+  ['claude-haiku-5-5', 0.1, 0.5],
+  ['claude-haiku', 1, 5],
+];
+
+/** Estimated cost of one call in millionths of a dollar ($ per million tokens x tokens). */
+export function costMicroUsd(model: string, inputTokens: number, outputTokens: number): number {
+  const [, inp, out] = PRICES.find(([p]) => model.startsWith(p)) ?? ['', 5, 25];
+  return Math.round(inputTokens * inp + outputTokens * out);
+}

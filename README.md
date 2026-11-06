@@ -19,6 +19,12 @@ It covers setting up the school, scores, broadsheets and report cards, plus pare
 - **SMS and WhatsApp**: all parent messages go through an outbox table and a background sender, using Termii (SMS, DND route for login codes, and WhatsApp). Without a Termii key, messages are logged instead of sent. Leadership can message all parents or one class, and see the message log.
 - **CBT**: a question bank per subject and topic (typed in, CSV import, or AI drafts a teacher reviews). Teachers set timed tests for their classes; students log in with admission number and PIN. Answers autosave, the clock keeps running if the browser closes, and late attempts are submitted automatically. Teachers see scores and how many got each question right, and can push CBT scores into a score column such as 1st CA.
 - **AI exam prep**: each student's profile is worked out from their own report card history (scores, drops since last term, below the WAEC credit line) and CBT topic accuracy. On top of that, Claude writes a two-week study plan, practice sets aim at the weakest topics (never using questions from tests still open), and wrong answers get explained after submitting (cached, with a daily limit per student). Teachers can also get AI-drafted report card remarks.
+- **AI learning layer** (phase 1, see [docs/ai-learning-layer.md](docs/ai-learning-layer.md)):
+  - **Knowledge base**: teachers and admins upload schemes of work, lesson notes, past questions, marking schemes and textbook extracts (PDF, Word, text, photos) by class, subject and term. The AI answers from the school's own material first and cites it.
+  - **AI tutor** for students: a chat per subject and topic that explains at the student's class level, gives worked examples and quizzes, follows the school's scheme of work, and guides students to the answer instead of doing their homework.
+  - **Exam prep** for WAEC, NECO, JAMB (UTME) and BECE: practice by subject and topic, timed JAMB-style mocks with explanations, weak-topic tracking, predicted readiness and a week-by-week plan to exam day.
+  - **Guardrails**: safety screening of student messages with flags for leadership, a monthly AI allowance per school and a daily limit per student, cost logged per feature.
+  - Works without an Anthropic key: the tutor and knowledge base fall back to the school's notes and question bank.
 - **Tenant isolation**: every school's data is separated by Postgres row-level security, tested end to end. The API switches to a restricted `school_app` role inside each school's transaction, so isolation holds even if it connects as a superuser. The role that runs migrations needs `CREATEROLE` (or superuser) the first time, to create `school_app`.
 
 - **Web app** with five portals, all reading and writing the real API and database:
@@ -122,6 +128,12 @@ All routes are under `/api` and need `Authorization: Bearer <token>` except sign
 | POST | `/student/auth/login` | anyone |
 | GET, POST, PUT | `/student/me`, `/student/tests`, `/student/tests/:id/start`, `/student/attempts/:id[/answers, /submit]` | student |
 | GET, POST | `/student/prep/plan`, `/student/prep/practice`, `/student/prep/explain/:questionId`, `/student/results[/:termId]` | student |
+| GET, POST, PATCH, DELETE | `/kb/documents`, `/kb/documents/:id[/file, /reprocess]` (upload is a raw body with metadata in the query string) | staff; uploader or leadership to change |
+| POST | `/kb/ask` | staff |
+| GET, POST | `/student/tutor/topics`, `/student/tutor/conversations[/:id]`, `/student/tutor/conversations/:id/messages`, `/student/tutor/messages/:id/quiz` | student |
+| GET, PUT, POST | `/student/exams`, `/student/exams/goal`, `/student/exams/topics`, `/student/exams/plan`, `/student/exams/mock` | student |
+| GET | `/ai/overview`, `/ai/flags/:conversationId` | leadership |
+| PATCH | `/platform/schools/:id/ai` (monthly AI allowance, daily student limit) | platform super admin |
 | POST | `/platform/auth/login` | anyone |
 | GET | `/platform/me`, `/platform/schools`, `/platform/admins` | platform super admin |
 
@@ -133,7 +145,7 @@ Copy `apps/api/.env.example`. Everything runs without keys: messages are logged 
 
 - **Paystack**: put a test secret key (`sk_test_...`) in `PAYSTACK_SECRET_KEY` and set the webhook URL in the Paystack dashboard to `<api>/api/webhooks/paystack`. Each school connects its bank account once (`POST /fees/paystack/subaccount`), so fees settle straight to the school.
 - **Termii**: `TERMII_API_KEY`, an approved `TERMII_SENDER_ID`, and your account's `TERMII_BASE_URL`. WhatsApp needs a WhatsApp sender set up in Termii.
-- **Claude**: `ANTHROPIC_API_KEY`. Every AI call is logged in `ai_usage` (tokens per school and student) and limited per student per day.
+- **Claude**: `ANTHROPIC_API_KEY`. Every AI call is logged in `ai_usage` (tokens and cost per school, student and feature), limited per student per day and by each school's monthly allowance. `AI_TUTOR_MODEL` picks a different model for the tutor chat. `KB_MAX_UPLOAD_MB` caps knowledge base uploads (15 MB), and `USD_NGN_RATE` converts the AI allowance to naira on screen.
 
 ## Next
 

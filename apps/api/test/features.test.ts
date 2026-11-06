@@ -28,6 +28,7 @@ class FakePaystack extends PaystackClient {
 const aiCalls: JsonRequest<unknown>[] = [];
 const fakeAi = {
   enabled: true,
+  async assertStudentAllowance() {},
   async json<T>(req: JsonRequest<T>): Promise<T> {
     aiCalls.push(req as JsonRequest<unknown>);
     const replies: Record<string, unknown> = {

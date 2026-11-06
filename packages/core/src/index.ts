@@ -5,3 +5,6 @@ export * from './phone';
 export * from './prep';
 export * from './ranking';
 export * from './results';
+export * from './exams';
+export * from './knowledge';
+export * from './safety';

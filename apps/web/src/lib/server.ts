@@ -8,23 +8,26 @@ export const API_URL = process.env.API_URL ?? 'http://localhost:3001/api';
 
 export type Portal = 'admin' | 'teacher' | 'parent' | 'student' | 'super-admin';
 
-/** Forwards a request to the API, adding the user's token from the httpOnly cookie. */
-export async function forward(path: string, init: { method: string; body?: string; search?: string }) {
+/**
+ * Forwards a request to the API, adding the user's token from the httpOnly cookie.
+ * Bodies pass through as bytes, so file uploads and downloads (knowledge base) work too.
+ */
+export async function forward(path: string, init: { method: string; body?: ArrayBuffer; contentType?: string | null; search?: string }) {
   const token = (await cookies()).get(TOKEN_COOKIE)?.value;
   const res = await fetch(`${API_URL}/${path}${init.search ?? ''}`, {
     method: init.method,
-    body: init.body,
+    body: init.body && init.body.byteLength ? init.body : undefined,
     headers: {
-      'content-type': 'application/json',
+      'content-type': init.contentType ?? 'application/json',
       ...(token ? { authorization: `Bearer ${token}` } : {}),
     },
     cache: 'no-store',
   });
-  const text = await res.text();
-  return new NextResponse(text || null, {
-    status: res.status,
-    headers: { 'content-type': res.headers.get('content-type') ?? 'application/json' },
-  });
+  const headers: Record<string, string> = { 'content-type': res.headers.get('content-type') ?? 'application/json' };
+  const disposition = res.headers.get('content-disposition');
+  if (disposition) headers['content-disposition'] = disposition;
+  const body = await res.arrayBuffer();
+  return new NextResponse(body.byteLength ? body : null, { status: res.status, headers });
 }
 
 /** Token lifetimes match the API: parents 30 days, students 6 hours, staff 12 hours. */

@@ -1,5 +1,6 @@
 import {
   boolean,
+  customType,
   date,
   doublePrecision,
   index,
@@ -12,7 +13,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import type { AssessmentComponent, GradingScale } from '@school-ms/core';
+import type { AssessmentComponent, GradingScale, OutlineEntry } from '@school-ms/core';
 
 /**
  * Every table except `schools` carries school_id and is protected by a Postgres
@@ -43,6 +44,10 @@ export const schools = pgTable('schools', {
   paystackSubaccountCode: text('paystack_subaccount_code'),
   /** When true, parents and students cannot open a report card while that term's fees are owed. */
   withholdResultsForDebt: boolean('withhold_results_for_debt').notNull().default(false),
+  /** Monthly AI spending cap in US cents (Claude bills in dollars). Set by the Linx School team. */
+  aiMonthlyBudgetCents: integer('ai_monthly_budget_cents').notNull().default(10000),
+  /** AI tutor messages and explanations a student may use per day; null uses the platform default. */
+  aiStudentDailyLimit: integer('ai_student_daily_limit'),
   createdAt: createdAt(),
 });
 
@@ -494,7 +499,14 @@ export const cbtTestClasses = pgTable(
   (t) => [uniqueIndex('cbt_test_class_unique').on(t.testId, t.classId)],
 );
 
-export const attemptKind = pgEnum('attempt_kind', ['test', 'practice']);
+export const attemptKind = pgEnum('attempt_kind', ['test', 'practice', 'mock']);
+
+/** What a timed mock exam covers, so the review can score each subject (JAMB has four). */
+export interface MockInfo {
+  exam: 'waec' | 'neco' | 'jamb' | 'bece';
+  size: 'full' | 'short';
+  subjects: { subjectId: string; name: string; count: number }[];
+}
 
 /** A student's sitting of a CBT test, or a self-paced practice set from exam prep. */
 export const cbtAttempts = pgTable(
@@ -519,6 +531,9 @@ export const cbtAttempts = pgTable(
     score: doublePrecision('score'),
     maxScore: doublePrecision('max_score'),
     percentage: doublePrecision('percentage'),
+    /** Practice and mocks aimed at an external exam. */
+    exam: examTag('exam'),
+    mock: jsonb('mock').$type<MockInfo>(),
   },
   (t) => [uniqueIndex('cbt_attempt_test_student').on(t.testId, t.studentId), index('cbt_attempts_student').on(t.studentId)],
 );
@@ -553,9 +568,159 @@ export const aiUsage = pgTable(
     model: text('model').notNull(),
     inputTokens: integer('input_tokens').notNull(),
     outputTokens: integer('output_tokens').notNull(),
+    /** Estimated cost in millionths of a US dollar, from the model's list price. */
+    costMicroUsd: integer('cost_micro_usd').notNull().default(0),
     createdAt: createdAt(),
   },
-  (t) => [index('ai_usage_student_day').on(t.studentId, t.createdAt)],
+  (t) => [index('ai_usage_student_day').on(t.studentId, t.createdAt), index('ai_usage_school_month').on(t.schoolId, t.createdAt)],
+);
+
+// ---------------------------------------------------------------- Knowledge base
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' });
+
+export const kbKind = pgEnum('kb_kind', ['scheme_of_work', 'lesson_note', 'past_questions', 'textbook', 'marking_scheme', 'other']);
+/** processing: being read; ready: searchable; needs_ai: a scan or photo waiting for AI to read it; failed: could not be read. */
+export const kbStatus = pgEnum('kb_status', ['processing', 'ready', 'needs_ai', 'failed']);
+
+/** A document a teacher or admin uploaded: scheme of work, lesson note, past questions, textbook. */
+export const kbDocuments = pgTable(
+  'kb_documents',
+  {
+    id: id(),
+    schoolId: schoolId(),
+    title: text('title').notNull(),
+    kind: kbKind('kind').notNull(),
+    subjectId: uuid('subject_id').references(() => subjects.id, { onDelete: 'cascade' }),
+    /** Class level as the school names it, e.g. "SS 2" (matches classes.name). Null means every level. */
+    classLevel: text('class_level'),
+    /** 1, 2 or 3. Null means the whole year. */
+    termNumber: integer('term_number'),
+    fileName: text('file_name').notNull(),
+    mimeType: text('mime_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    status: kbStatus('status').notNull().default('processing'),
+    error: text('error'),
+    chunkCount: integer('chunk_count').notNull().default(0),
+    /** Weekly topics read from a scheme of work. */
+    outline: jsonb('outline').$type<OutlineEntry[]>().notNull().default([]),
+    visibleToStudents: boolean('visible_to_students').notNull().default(true),
+    uploadedBy: uuid('uploaded_by').references(() => staff.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('kb_documents_subject').on(t.schoolId, t.subjectId)],
+);
+
+/** The original uploaded file, kept so it can be re-read (e.g. by AI once a key is added) or downloaded. */
+export const kbFiles = pgTable('kb_files', {
+  id: id(),
+  schoolId: schoolId(),
+  documentId: uuid('document_id')
+    .notNull()
+    .unique()
+    .references(() => kbDocuments.id, { onDelete: 'cascade' }),
+  data: bytea('data').notNull(),
+});
+
+/** Searchable passages of a document. A generated tsvector column (see migration 0007) powers search. */
+export const kbChunks = pgTable(
+  'kb_chunks',
+  {
+    id: id(),
+    schoolId: schoolId(),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => kbDocuments.id, { onDelete: 'cascade' }),
+    ordinal: integer('ordinal').notNull(),
+    locator: text('locator'),
+    text: text('text').notNull(),
+  },
+  (t) => [index('kb_chunks_document').on(t.documentId)],
+);
+
+// ---------------------------------------------------------------- AI tutor
+
+export interface Citation {
+  documentId: string;
+  title: string;
+  locator: string | null;
+  kind: string;
+}
+
+export interface TutorQuiz {
+  question: string;
+  options: QuestionOption[];
+  answer: string;
+  explanation: string;
+  /** Set when the quiz came from the school's question bank. */
+  questionId?: string;
+}
+
+/** One chat with the tutor, about one subject (and usually one topic). */
+export const tutorConversations = pgTable(
+  'tutor_conversations',
+  {
+    id: id(),
+    schoolId: schoolId(),
+    studentId: uuid('student_id')
+      .notNull()
+      .references(() => students.id, { onDelete: 'cascade' }),
+    subjectId: uuid('subject_id')
+      .notNull()
+      .references(() => subjects.id, { onDelete: 'cascade' }),
+    topic: text('topic'),
+    title: text('title').notNull(),
+    /** A message in it needed a safeguarding or content check. Leadership sees flagged chats. */
+    flagged: boolean('flagged').notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('tutor_conversations_student').on(t.studentId, t.updatedAt)],
+);
+
+export const tutorRole = pgEnum('tutor_role', ['student', 'tutor']);
+
+export const tutorMessages = pgTable(
+  'tutor_messages',
+  {
+    id: id(),
+    schoolId: schoolId(),
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references(() => tutorConversations.id, { onDelete: 'cascade' }),
+    role: tutorRole('role').notNull(),
+    /** What the student asked for: ask, explain, example, quiz or hint. */
+    intent: text('intent'),
+    content: text('content').notNull(),
+    citations: jsonb('citations').$type<Citation[]>().notNull().default([]),
+    quiz: jsonb('quiz').$type<TutorQuiz>(),
+    quizAnswer: text('quiz_answer'),
+    quizCorrect: boolean('quiz_correct'),
+    /** Safety category if the student's message was flagged. */
+    safety: text('safety'),
+    /** ai, offline (stand-in without an AI key) or safety (fixed reply). */
+    source: text('source').notNull().default('ai'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('tutor_messages_conversation').on(t.conversationId, t.createdAt)],
+);
+
+/** An external exam a student is preparing for, with the date, for the countdown plan. */
+export const examGoals = pgTable(
+  'exam_goals',
+  {
+    id: id(),
+    schoolId: schoolId(),
+    studentId: uuid('student_id')
+      .notNull()
+      .references(() => students.id, { onDelete: 'cascade' }),
+    exam: examTag('exam').notNull(),
+    examDate: date('exam_date').notNull(),
+    subjectIds: jsonb('subject_ids').$type<string[]>().notNull().default([]),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('exam_goal_student_exam').on(t.studentId, t.exam)],
 );
 
 export const tenantTables = [
@@ -586,6 +751,12 @@ export const tenantTables = [
   'cbt_attempts',
   'question_explanations',
   'ai_usage',
+  'kb_documents',
+  'kb_files',
+  'kb_chunks',
+  'tutor_conversations',
+  'tutor_messages',
+  'exam_goals',
 ] as const;
 
 /**

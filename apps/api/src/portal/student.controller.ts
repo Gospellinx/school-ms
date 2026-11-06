@@ -7,16 +7,32 @@ import { CbtService } from '../cbt/cbt.service';
 import { found, parse, uuidParam } from '../common/validation';
 import { DbService } from '../db/db.service';
 import { classes, classSubjects, students, subjects } from '../db/schema';
+import { ExamPrepService } from '../prep/exam-prep.service';
 import { PrepService } from '../prep/prep.service';
 import { PortalResultsService } from './portal-results.service';
 
 const answersSchema = z.object({
   answers: z.record(z.string().uuid(), z.string().regex(/^[A-Ea-e]$/).nullable()),
 });
+const examCode = z.enum(['waec', 'neco', 'jamb', 'bece']);
 const practiceSchema = z.object({
   subjectId: z.string().uuid().optional(),
+  topic: z.string().trim().max(120).optional(),
+  exam: examCode.optional(),
   count: z.number().int().min(5).max(40).default(10),
 });
+const goalSchema = z.object({
+  exam: examCode,
+  examDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  subjectIds: z.array(z.string().uuid()).max(9),
+});
+const mockSchema = z.object({
+  exam: examCode,
+  subjectIds: z.array(z.string().uuid()).max(4).optional(),
+  size: z.enum(['full', 'short']).default('short'),
+});
+const examQuery = z.object({ exam: examCode });
+const topicsQuery = z.object({ exam: examCode, subjectId: z.string().uuid() });
 const planQuery = z.object({ ai: z.enum(['true', 'false']).default('true') });
 
 /** The student portal: CBT tests, AI exam prep and released results. */
@@ -28,6 +44,7 @@ export class StudentController {
     private readonly cbt: CbtService,
     private readonly prep: PrepService,
     private readonly portal: PortalResultsService,
+    private readonly exams_: ExamPrepService,
   ) {}
 
   @Get('me')
@@ -88,6 +105,36 @@ export class StudentController {
   @Post('prep/practice')
   practice(@CurrentUser() s: StudentPrincipal, @Body() body: unknown) {
     return this.prep.practice(s, parse(practiceSchema, body ?? {}));
+  }
+
+  /** Exams the student can prepare for, their goals, question counts and recent mocks. */
+  @Get('exams')
+  exams(@CurrentUser() s: StudentPrincipal) {
+    return this.exams_.overview(s);
+  }
+
+  /** Sets the exam date and subjects (four for JAMB, with Use of English). */
+  @Put('exams/goal')
+  setGoal(@CurrentUser() s: StudentPrincipal, @Body() body: unknown) {
+    return this.exams_.setGoal(s, parse(goalSchema, body));
+  }
+
+  @Get('exams/topics')
+  examTopics(@CurrentUser() s: StudentPrincipal, @Query() q: unknown) {
+    const { exam, subjectId } = parse(topicsQuery, q);
+    return this.exams_.topics(s, subjectId, exam);
+  }
+
+  /** Predicted readiness and a week-by-week plan to exam day. */
+  @Get('exams/plan')
+  examPlan(@CurrentUser() s: StudentPrincipal, @Query() q: unknown) {
+    return this.exams_.plan(s, parse(examQuery, q).exam);
+  }
+
+  /** Starts a timed mock. Answer, autosave and submit it like a test. */
+  @Post('exams/mock')
+  mock(@CurrentUser() s: StudentPrincipal, @Body() body: unknown) {
+    return this.exams_.startMock(s, parse(mockSchema, body ?? {}));
   }
 
   @Post('prep/explain/:questionId')
