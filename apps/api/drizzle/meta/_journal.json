@@ -71,6 +71,13 @@
       "when": 1794018000000,
       "tag": "0009_live_monitoring",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793992751281,
+      "tag": "0010_lesson_notes_vetting",
+      "breakpoints": true
     }
   ]
 }

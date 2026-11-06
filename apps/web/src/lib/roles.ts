@@ -1,4 +1,4 @@
-import { Activity, BarChart3, BookOpen, Bot, CalendarCheck, CalendarDays, ClipboardList, CreditCard, FileText, GraduationCap, LayoutDashboard, Library, LifeBuoy, MessageSquare, MonitorCheck, School, Settings, ShieldCheck, Sparkles, Target, UserCog, Users, Wallet, type LucideIcon } from "lucide-react";
+import { Activity, BarChart3, BookCheck, BookOpen, Bot, CalendarCheck, CalendarDays, ClipboardList, CreditCard, FileText, GraduationCap, LayoutDashboard, Library, LifeBuoy, MessageSquare, MonitorCheck, School, Settings, ShieldCheck, Sparkles, Target, UserCog, Users, Wallet, type LucideIcon } from "lucide-react";
 
 export type Role = "super-admin" | "admin" | "teacher" | "student" | "parent";
 
@@ -42,6 +42,7 @@ export const roles: Record<Role, RoleConfig> = {
       { label: "Fees", href: "/admin/fees", icon: Wallet },
       { label: "Messages", href: "/admin/messages", icon: MessageSquare },
       { label: "Knowledge Base", href: "/admin/knowledge", icon: Library },
+      { label: "Lesson Notes", href: "/admin/lesson-notes", icon: BookCheck },
       { label: "AI Usage & Safety", href: "/admin/ai", icon: ShieldCheck },
     ],
   },
@@ -57,6 +58,7 @@ export const roles: Record<Role, RoleConfig> = {
       { label: "Attendance", href: "/teacher/attendance", icon: CalendarCheck },
       { label: "CBT Tests", href: "/teacher/cbt", icon: MonitorCheck },
       { label: "Teaching Assistant", href: "/teacher/assistant", icon: Sparkles },
+      { label: "Lesson Notes", href: "/teacher/lesson-notes", icon: BookCheck },
       { label: "Knowledge Base", href: "/teacher/knowledge", icon: Library },
       { label: "Timetable", href: "/teacher/timetable", icon: CalendarDays },
     ],
