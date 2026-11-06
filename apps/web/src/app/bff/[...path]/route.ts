@@ -5,7 +5,7 @@ import { forward } from '@/lib/server';
 async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   const { path } = await ctx.params;
   const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : await req.arrayBuffer();
-  return forward(path.map(encodeURIComponent).join('/'), { method: req.method, body, contentType: req.headers.get('content-type'), search: req.nextUrl.search });
+  return forward(path.map(encodeURIComponent).join('/'), { method: req.method, body, contentType: req.headers.get('content-type'), search: req.nextUrl.search, signal: req.signal });
 }
 
 export { handle as GET, handle as POST, handle as PUT, handle as PATCH, handle as DELETE };
