@@ -1,5 +1,5 @@
 {
-  "id": "5c0ec16d-ec7f-40dc-bc2a-fd4d226d3a57",
+  "id": "35ecb05c-9ec7-4faf-a091-545954832ada",
   "prevId": "67143674-e6ae-4a1f-a9b0-48ddb1621829",
   "version": "7",
   "dialect": "postgresql",
@@ -2338,30 +2338,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "week": {
-          "name": "week",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "vetted_by": {
-          "name": "vetted_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "vetted_at": {
-          "name": "vetted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "vet_comment": {
-          "name": "vet_comment",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -2426,19 +2402,6 @@
           "tableTo": "staff",
           "columnsFrom": [
             "uploaded_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "kb_documents_vetted_by_staff_id_fk": {
-          "name": "kb_documents_vetted_by_staff_id_fk",
-          "tableFrom": "kb_documents",
-          "tableTo": "staff",
-          "columnsFrom": [
-            "vetted_by"
           ],
           "columnsTo": [
             "id"

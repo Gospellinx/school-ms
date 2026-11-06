@@ -12,7 +12,7 @@ export type Portal = 'admin' | 'teacher' | 'parent' | 'student' | 'super-admin';
  * Forwards a request to the API, adding the user's token from the httpOnly cookie.
  * Bodies pass through as bytes, so file uploads and downloads (knowledge base) work too.
  */
-export async function forward(path: string, init: { method: string; body?: ArrayBuffer; contentType?: string | null; search?: string }) {
+export async function forward(path: string, init: { method: string; body?: ArrayBuffer; contentType?: string | null; search?: string; signal?: AbortSignal }) {
   const token = (await cookies()).get(TOKEN_COOKIE)?.value;
   const res = await fetch(`${API_URL}/${path}${init.search ?? ''}`, {
     method: init.method,
@@ -22,7 +22,15 @@ export async function forward(path: string, init: { method: string; body?: Array
       ...(token ? { authorization: `Bearer ${token}` } : {}),
     },
     cache: 'no-store',
+    signal: init.signal,
   });
+  // Live monitoring streams (Server-Sent Events) pass straight through instead of being buffered.
+  if (res.ok && res.headers.get('content-type')?.startsWith('text/event-stream') && res.body) {
+    return new NextResponse(res.body, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache, no-transform', connection: 'keep-alive', 'x-accel-buffering': 'no' },
+    });
+  }
   const headers: Record<string, string> = { 'content-type': res.headers.get('content-type') ?? 'application/json' };
   const disposition = res.headers.get('content-disposition');
   if (disposition) headers['content-disposition'] = disposition;
