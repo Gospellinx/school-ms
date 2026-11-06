@@ -21,12 +21,20 @@ It covers setting up the school, scores, broadsheets and report cards, plus pare
 - **AI exam prep**: each student's profile is worked out from their own report card history (scores, drops since last term, below the WAEC credit line) and CBT topic accuracy. On top of that, Claude writes a two-week study plan, practice sets aim at the weakest topics (never using questions from tests still open), and wrong answers get explained after submitting (cached, with a daily limit per student). Teachers can also get AI-drafted report card remarks.
 - **Tenant isolation**: every school's data is separated by Postgres row-level security, tested end to end. The API switches to a restricted `school_app` role inside each school's transaction, so isolation holds even if it connects as a superuser. The role that runs migrations needs `CREATEROLE` (or superuser) the first time, to create `school_app`.
 
-- **Web app** for staff: sign in or register a school, a setup checklist, sessions and terms, classes with subjects and teachers, staff accounts, student import from CSV, a score entry grid that checks scores as you type, the class broadsheet, and report cards that print or save as A4 PDF from the browser. Teachers only see their own class subjects. Works on phones.
+- **Web app** with five portals, all reading and writing the real API and database:
+  - **Admin** (proprietor and admin): live dashboard (students, fees collected, today's registers, score entry progress, recent parent messages), students and parents, staff, classes and subjects, results (broadsheet, comments, publish), attendance, fees and bills, messages, and settings (school, calendar, grading, Paystack).
+  - **Teacher**: dashboard, my classes, score entry, the daily register, report card comments with an AI draft, and CBT (question bank, tests, results, push scores to a CA column).
+  - **Student**: dashboard, subjects, exam prep (practice sets on weak topics, study plan when AI is on), CBT tests with a timer and autosave, a review with explanations, and released report cards.
+  - **Parent**: dashboard per child, report cards, attendance day by day, fee bills with Paystack checkout (`/pay/done` confirms the payment), and the messages the school has sent.
+  - **Super admin** (Linx School team): every school with headline numbers, question bank counts, proposed billing and platform users.
+  - Sign-in sets an httpOnly cookie; middleware keeps each user inside their own portal. Report cards print as A4. Works on phones.
+- **Platform super admin**: a separate login (`/platform/...`) for the Linx School team that can see every school's counts, read inside each school's row-level-security scope.
 
 ## Layout
 
 ```
-apps/web        Next.js staff web app; talks to the API through its own /bff proxy so the login token stays in an httpOnly cookie
+apps/web        Next.js app for all five portals (src/app/admin, teacher, student, parent, super-admin);
+                talks to the API through its own /bff proxy so the login token stays in an httpOnly cookie
 apps/api        NestJS API (REST), Drizzle ORM, PostgreSQL
 packages/core   Pure TypeScript logic: grading scales, totals, ranking, class results
 ```
@@ -40,10 +48,27 @@ pnpm install
 docker compose up -d            # or use your own Postgres
 cp apps/api/.env.example apps/api/.env
 pnpm db:migrate                 # creates tables and row-level security policies
-pnpm db:seed                    # demo school: gcis-demo / proprietor@demo.test / demo-password
+pnpm db:seed                    # rebuilds the demo schools (see below)
 pnpm dev:api                    # http://localhost:3001/api
+cp apps/web/.env.example apps/web/.env.local
 pnpm dev:web                    # http://localhost:3000 (set API_URL if the API is elsewhere)
 ```
+
+Build `packages/core` first if the API complains it cannot find it: `pnpm --filter @school-ms/core build`.
+
+### Demo logins
+
+The seed builds a GCIS-style school (`gcis-demo`): nursery to SS 3, 48 students, two terms of published results, a current term with CAs entered, four weeks of registers, fee bills with payments, a WAEC question bank, CBT tests and parent messages. It also adds a small second school (`bright-future-demo`). Running it again deletes and rebuilds both demo schools only.
+
+| Portal | Sign in with |
+| --- | --- |
+| Proprietor | school `gcis-demo`, `proprietor@demo.test` / `demo-password` (also `admin@demo.test`) |
+| Teacher | school `gcis-demo`, `teacher@demo.test` / `demo-password` (form teacher of SS 2 Gold) |
+| Parent | school `gcis-demo`, phone `0803 123 4567` (two children). With no SMS key and outside production, the login code is shown on screen. |
+| Student | school `gcis-demo`, admission number `GCIS/S/001`, PIN `123456` (every demo student has this PIN) |
+| Super admin | "Linx School team sign-in" link, `super@linxschool.test` / `demo-password` |
+
+With `NEXT_PUBLIC_SHOW_DEMO_LOGINS=true` the sign-in page shows one-click demo buttons. Leave it off in production.
 
 Tests need a separate database (`schoolms_test`, wiped on every run):
 
@@ -60,7 +85,9 @@ All routes are under `/api` and need `Authorization: Bearer <token>` except sign
 | --- | --- | --- |
 | POST | `/auth/register-school` | anyone |
 | POST | `/auth/login` | anyone |
-| GET | `/auth/me` | staff |
+| GET, PATCH | `/auth/me` | staff (PATCH changes your name) |
+| POST | `/auth/password` | staff, with the current password |
+| GET | `/dashboard` | staff; leadership also gets school counts, fees, results released and recent messages |
 | GET, POST | `/sessions` | staff, leadership to create |
 | POST | `/terms/:id/make-current` | leadership |
 | GET, PATCH | `/sections`, `/sections/:id` | staff, leadership to edit grading |
@@ -89,17 +116,20 @@ All routes are under `/api` and need `Authorization: Bearer <token>` except sign
 | GET | `/students/:id/prep-plan` | staff |
 | POST | `/terms/:termId/students/:studentId/comments/draft` | staff (AI) |
 | POST | `/parent/auth/request-code`, `/parent/auth/verify` | anyone |
-| GET | `/parent/me`, `/parent/children/:id/results[/:termId]`, `/attendance`, `/invoices` | parent |
+| GET, PATCH | `/parent/me` (PATCH sets SMS or WhatsApp) | parent |
+| GET | `/parent/messages`, `/parent/children/:id/results[/:termId]`, `/attendance`, `/invoices` | parent |
 | POST, GET | `/parent/invoices/:id/pay`, `/parent/payments/:reference/verify` | parent |
 | POST | `/student/auth/login` | anyone |
 | GET, POST, PUT | `/student/me`, `/student/tests`, `/student/tests/:id/start`, `/student/attempts/:id[/answers, /submit]` | student |
 | GET, POST | `/student/prep/plan`, `/student/prep/practice`, `/student/prep/explain/:questionId`, `/student/results[/:termId]` | student |
+| POST | `/platform/auth/login` | anyone |
+| GET | `/platform/me`, `/platform/schools`, `/platform/admins` | platform super admin |
 
-"Leadership" means the proprietor or an admin. Parent and student tokens only work on `/parent/...` and `/student/...` routes. Money is always in kobo (₦1 = 100 kobo), as Paystack uses.
+"Leadership" means the proprietor or an admin. Parent, student and platform tokens only work on `/parent/...`, `/student/...` and `/platform/...` routes. The `platform_admins` table (migration 0005) is outside row-level security and the `school_app` role cannot read it. Money is always in kobo (₦1 = 100 kobo), as Paystack uses.
 
 ## Keys and sandbox mode
 
-Copy `apps/api/.env.example`. Everything runs without keys: messages are logged instead of sent, and online payment and AI answer "not set up yet".
+Copy `apps/api/.env.example`. Everything runs without keys: messages are logged instead of sent, and online payment and AI answer "not set up yet". While messages are only logged and `NODE_ENV` is not `production`, the parent login code comes back in the API response (`devCode`) so you can sign in without a phone.
 
 - **Paystack**: put a test secret key (`sk_test_...`) in `PAYSTACK_SECRET_KEY` and set the webhook URL in the Paystack dashboard to `<api>/api/webhooks/paystack`. Each school connects its bank account once (`POST /fees/paystack/subaccount`), so fees settle straight to the school.
 - **Termii**: `TERMII_API_KEY`, an approved `TERMII_SENDER_ID`, and your account's `TERMII_BASE_URL`. WhatsApp needs a WhatsApp sender set up in Termii.
@@ -108,5 +138,6 @@ Copy `apps/api/.env.example`. Everything runs without keys: messages are logged 
 ## Next
 
 1. Printing a whole class's report cards at once.
-2. Timetable and admissions.
+2. Timetable (the screens show "coming next") and admissions.
+4. Charging schools from the super admin billing page, and a shared question bank across schools.
 3. Offline CBT for exam halls with poor internet.

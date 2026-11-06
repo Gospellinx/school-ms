@@ -1,94 +1,81 @@
+"use client";
 import Link from "next/link";
-import { Banknote, MoreHorizontal, School, TrendingUp, Users } from "lucide-react";
+import { BookOpenCheck, GraduationCap, School, Users, Wallet } from "lucide-react";
 import { Hero } from "@/components/widgets/hero";
 import { StatCard } from "@/components/widgets/stat-card";
-import { StatusBadge } from "@/components/widgets/status-badge";
 import { Card, CardHeader } from "@/components/ui/card";
-import { Avatar } from "@/components/ui/avatar";
 import { BarChart } from "@/components/charts/bar-chart";
 import { Donut, Legend } from "@/components/charts/donut";
-import { Table, THead, TH, TR, TD } from "@/components/ui/table";
+import { SchoolsTable } from "@/components/pages/schools-table";
 import { buttonClass } from "@/components/ui/button";
-import { schools } from "@/lib/mock";
-import { naira } from "@/lib/utils";
+import { Async, Empty } from "@/components/ui/feedback";
+import { useApi } from "@/lib/api";
+import { usePlatform } from "@/lib/session";
+import { naira } from "@/lib/format";
+import type { SchoolSummary } from "@/lib/types";
 
-export const metadata = { title: "Super Admin" };
-
-const revenue = [
-  { label: "Jun", value: 620 }, { label: "Jul", value: 710 }, { label: "Aug", value: 680 }, { label: "Sep", value: 1040 },
-  { label: "Oct", value: 1210 }, { label: "Nov", value: 1322 },
-];
-const plans = [
-  { label: "Premium", value: 2, color: "#6a3bf0" },
-  { label: "Standard", value: 4, color: "#e879f9" },
-  { label: "Basic", value: 2, color: "#f5d0fe" },
-];
+const EXAM_COLORS: Record<string, string> = { waec: "#6a3bf0", neco: "#e879f9", bece: "#f5d0fe", jamb: "#c4b5fd", school: "#ebe5ff" };
+const EXAM_LABELS: Record<string, string> = { waec: "WAEC", neco: "NECO", bece: "BECE", jamb: "JAMB", school: "School" };
 
 export default function SuperAdminDashboard() {
+  const me = usePlatform();
+  const { data, error } = useApi<SchoolSummary[]>("platform/schools");
   return (
-    <>
-      <h1 className="mb-5 text-[28px] font-bold tracking-tight sm:text-4xl">Dashboard</h1>
-      <Hero
-        name="Gospel"
-        line="8 schools on Linx School · 3 waiting for you"
-        stats={[
-          { icon: School, value: "8", label: "Schools" },
-          { icon: Users, value: "4,034", label: "Students" },
-        ]}
-        asideTitle="Needs your attention"
-        aside={
-          <ul className="flex flex-col gap-3">
-            {schools.filter((s) => s.status !== "Active").slice(0, 3).map((s) => (
-              <li key={s.name} className="flex items-center gap-3">
-                <Avatar name={s.name} size={38} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold">{s.name}</span>
-                  <span className="block text-xs text-muted">{s.city}</span>
-                </span>
-                <StatusBadge status={s.status} />
-              </li>
-            ))}
-            <Link href="/super-admin/schools" className={buttonClass("secondary", "sm", "mt-1 w-full")}>Review schools</Link>
-          </ul>
-        }
-      />
-
-      <div className="mb-5 grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <StatCard icon={Banknote} label="Monthly revenue" value="₦1.32m" delta="+9%" />
-        <StatCard icon={School} label="Active schools" value="5" tone="orchid" />
-        <StatCard icon={TrendingUp} label="Fees processed (Nov)" value="₦48.6m" tone="green" delta="+21%" />
-        <StatCard icon={Users} label="Parents on WhatsApp" value="3,187" tone="amber" />
-      </div>
-
-      <div className="grid gap-5 lg:grid-cols-[1.6fr_1fr]">
-        <Card className="bg-gradient-to-b from-orchid-100/70 to-white">
-          <CardHeader title="Subscription Revenue" subtitle="Thousands of naira per month" action={<span className="rounded-xl bg-white/70 px-3 py-1.5 text-xs font-medium">Jun – Nov 2026</span>} />
-          <BarChart data={revenue} unit="naira-k" height={230} />
-        </Card>
-        <Card>
-          <CardHeader title="Plans" action={<MoreHorizontal className="h-5 w-5 text-muted" />} />
-          <Donut slices={plans} centerValue="8" centerLabel="Schools" />
-          <Legend slices={plans} />
-        </Card>
-      </div>
-
-      <Card className="mt-5">
-        <CardHeader title="Recently joined" action={<Link href="/super-admin/schools" className="text-sm font-semibold text-brand-600">All schools</Link>} />
-        <Table>
-          <THead><tr><TH>School</TH><TH>Plan</TH><TH>Students</TH><TH>MRR</TH><TH>Status</TH></tr></THead>
-          <tbody>
-            {schools.slice(3).map((s) => (
-              <TR key={s.name}>
-                <TD><div className="flex items-center gap-3"><Avatar name={s.name} size={34} /><div><p className="font-semibold">{s.name}</p><p className="text-xs text-muted">{s.city} · since {s.since}</p></div></div></TD>
-                <TD>{s.plan}</TD>
-                <TD>{s.students}</TD>
-                <TD>{s.mrr ? naira(s.mrr) : "—"}</TD>
-                <TD><StatusBadge status={s.status} /></TD>
-              </TR>
-            ))}
-          </tbody>
-        </Table>
-      </Card>
-    </>
+    <Async data={data} error={error}>
+      {(schools) => {
+        const sum = (f: (s: SchoolSummary) => number) => schools.reduce((n, s) => n + f(s), 0);
+        const byExam = new Map<string, number>();
+        for (const s of schools) for (const [k, v] of Object.entries(s.questionsByExam)) byExam.set(k, (byExam.get(k) ?? 0) + v);
+        const slices = [...byExam.entries()].map(([k, v]) => ({ label: EXAM_LABELS[k] ?? k, value: v, color: EXAM_COLORS[k] ?? "#ddd" }));
+        return (
+          <>
+            <h1 className="mb-5 text-[28px] font-bold tracking-tight sm:text-4xl">Dashboard</h1>
+            <Hero
+              name={me.admin.fullName}
+              line={`Linx School platform · ${schools.length} schools`}
+              stats={[
+                { icon: School, value: String(schools.length), label: "Schools" },
+                { icon: GraduationCap, value: sum((s) => s.students).toLocaleString(), label: "Students" },
+              ]}
+              asideTitle="Payments"
+              aside={
+                <div>
+                  <p className="text-lg font-semibold">{schools.filter((s) => s.paystackConnected).length} of {schools.length} schools</p>
+                  <p className="mt-1 text-sm text-muted">have Paystack connected, so parents can pay online.</p>
+                  <Link href="/super-admin/schools" className={buttonClass("primary", "sm", "mt-4 w-full")}>View schools</Link>
+                </div>
+              }
+            />
+            <div className="mb-5 grid grid-cols-2 gap-4 xl:grid-cols-4">
+              <StatCard icon={Users} label="Staff" value={String(sum((s) => s.staff))} />
+              <StatCard icon={Users} label="Parents" value={String(sum((s) => s.parents))} tone="orchid" />
+              <StatCard icon={Wallet} label="Fees collected (all time)" value={naira(sum((s) => s.feesCollectedKobo), { compact: true })} tone="green" />
+              <StatCard icon={BookOpenCheck} label="Questions in banks" value={String(sum((s) => s.questions))} tone="amber" />
+            </div>
+            <div className="grid gap-5 lg:grid-cols-[1.6fr_1fr]">
+              <Card className="bg-gradient-to-b from-orchid-100/70 to-white">
+                <CardHeader title="Students per school" />
+                {schools.length ? <BarChart data={schools.map((s) => ({ label: s.name.replace(/\s*\(.*\)/, ""), value: s.students }))} height={220} /> : <Empty title="No schools yet" />}
+              </Card>
+              <Card>
+                <CardHeader title="Question bank" subtitle="By exam" action={<Link href="/super-admin/question-bank" className="text-sm font-semibold text-brand-600">View</Link>} />
+                {slices.length ? (
+                  <>
+                    <Donut slices={slices} centerValue={String(sum((s) => s.questions))} centerLabel="Questions" />
+                    <Legend slices={slices} />
+                  </>
+                ) : (
+                  <Empty title="No questions yet" />
+                )}
+              </Card>
+            </div>
+            <Card className="mt-5">
+              <CardHeader title="Schools" action={<Link href="/super-admin/schools" className="text-sm font-semibold text-brand-600">See all</Link>} />
+              <SchoolsTable schools={schools} />
+            </Card>
+          </>
+        );
+      }}
+    </Async>
   );
 }

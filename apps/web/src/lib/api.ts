@@ -32,7 +32,7 @@ export async function api<T = unknown>(path: string, init?: { method?: string; b
   const text = await res.text();
   const body = text ? JSON.parse(text) : null;
   if (res.status === 401 && typeof window !== 'undefined') {
-    window.location.href = '/login';
+    window.location.href = '/';
   }
   if (!res.ok) throw new ApiError(messageFrom(body, `Request failed (${res.status})`), res.status, body);
   return body as T;

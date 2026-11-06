@@ -135,7 +135,11 @@ export class DashboardController {
         : [];
       const messages = await rows(
         tx,
-        sql`select id, kind, channel, body, status, created_at as "createdAt" from notifications order by created_at desc limit 6`,
+        // One outbox row per parent: group them back into the messages that were sent.
+        sql`select min(id::text) as id, kind, min(channel::text) as channel, body, count(*)::int as recipients,
+                   count(*) filter (where status = 'sent')::int as sent, max(created_at) as "createdAt"
+            from notifications group by kind, body, date_trunc('minute', created_at)
+            order by max(created_at) desc limit 6`,
       );
 
       return {

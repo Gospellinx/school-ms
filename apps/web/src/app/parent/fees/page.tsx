@@ -1,65 +1,118 @@
 "use client";
 import * as React from "react";
-import { CheckCircle2, CreditCard, Landmark, Smartphone } from "lucide-react";
+import { Suspense } from "react";
+import { Lock } from "lucide-react";
 import { PageHeader } from "@/components/shell/page-header";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input, Label } from "@/components/ui/input";
 import { StatusBadge } from "@/components/widgets/status-badge";
-import { feeItems, payments } from "@/lib/mock";
-import { cn, naira } from "@/lib/utils";
+import { Async, Empty, ErrorNote, Loading } from "@/components/ui/feedback";
+import { api, ApiError, useApi } from "@/lib/api";
+import { ChildPicker, childClass, childName, useChild } from "@/lib/child";
+import { dateTime, INVOICE_STATUS, naira } from "@/lib/format";
+import type { InvoiceDetail } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
-const methods = [
-  { k: "Card", icon: CreditCard, sub: "Verve, Mastercard, Visa" },
-  { k: "Bank transfer", icon: Landmark, sub: "Pay to a one-time account" },
-  { k: "USSD", icon: Smartphone, sub: "No internet needed" },
-];
+const PAYMENT_STATUS: Record<string, string> = { success: "Successful", pending: "Pending", failed: "Failed", abandoned: "Failed" };
 
-export default function ParentFees() {
-  const [method, setMethod] = React.useState("Bank transfer");
-  const total = feeItems.reduce((a, b) => a + b.amount, 0);
+function PayBox({ invoice }: { invoice: InvoiceDetail }) {
+  const [amount, setAmount] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const part = amount.trim() ? Math.round(Number(amount) * 100) : null;
+  const toPay = part ?? invoice.balanceKobo;
+
+  async function pay() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api<{ authorizationUrl: string }>(`parent/invoices/${invoice.id}/pay`, { method: "POST", body: part ? { amountKobo: part } : {} });
+      window.location.href = r.authorizationUrl;
+    } catch (e) {
+      setError(e instanceof ApiError && e.status === 503 ? "Online payment is not switched on for this school yet. Please pay at the bursary or by bank transfer for now." : (e as Error).message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="h-fit">
+      <CardHeader title="Pay balance" subtitle={`Bill ${invoice.number}`} />
+      <p className="text-4xl font-bold tracking-tight">{naira(invoice.balanceKobo)}</p>
+      <p className="text-sm text-muted">Card, bank transfer or USSD. It goes straight to the school&apos;s account.</p>
+      <div className="mt-5">
+        <Label htmlFor="amt">Pay part now (optional)</Label>
+        <Input id="amt" inputMode="decimal" placeholder={`Up to ${naira(invoice.balanceKobo)}`} value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))} />
+      </div>
+      <ErrorNote className="mt-4">{error}</ErrorNote>
+      <Button size="lg" className="mt-5 w-full" disabled={busy || toPay <= 0 || toPay > invoice.balanceKobo} onClick={pay}>
+        {busy ? "Opening checkout…" : `Pay ${naira(toPay)}`}
+      </Button>
+      <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted"><Lock className="h-3 w-3" /> Secured by Paystack</p>
+    </Card>
+  );
+}
+
+function Fees() {
+  const child = useChild();
+  const { data, error } = useApi<InvoiceDetail[]>(child ? `parent/children/${child.id}/invoices` : null);
+  const [pick, setPick] = React.useState<string | null>(null);
+  if (!child) return <Card><Empty title="No children linked yet" /></Card>;
   return (
     <>
-      <PageHeader title="Fees & Payments" subtitle="Chiamaka Okafor · SS 2 Gold · First Term" />
-      <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
-        <Card>
-          <CardHeader title="Invoice" subtitle="INV-2026-1T-0101" action={<StatusBadge status="Part paid" />} />
-          <ul className="divide-y divide-line text-sm">
-            {feeItems.map((f) => <li key={f.item} className="flex justify-between py-3"><span>{f.item}</span><span className="font-semibold">{naira(f.amount)}</span></li>)}
-            <li className="flex justify-between py-3 font-semibold"><span>Total</span><span>{naira(total)}</span></li>
-            <li className="flex justify-between py-3 text-emerald-600"><span>Paid</span><span>− {naira(130000)}</span></li>
-            <li className="flex justify-between py-3 text-lg font-bold"><span>Balance</span><span>{naira(total - 130000)}</span></li>
-          </ul>
-          <h4 className="mt-6 mb-3 font-semibold">Payment history</h4>
-          <ul className="flex flex-col gap-2">
-            {payments.slice(1, 2).concat(payments.slice(3, 4)).map((p) => (
-              <li key={p.ref} className="flex items-center justify-between rounded-2xl bg-canvas p-3 text-sm">
-                <span><span className="block font-semibold">{naira(p.amount)}</span><span className="text-xs text-muted">{p.date} · {p.method}</span></span>
-                <StatusBadge status={p.status} />
-              </li>
-            ))}
-          </ul>
-        </Card>
-        <Card className="h-fit">
-          <CardHeader title="Pay balance" />
-          <p className="text-4xl font-bold tracking-tight">{naira(total - 130000)}</p>
-          <p className="text-sm text-muted">Goes straight to the school&apos;s bank account.</p>
-          <div className="mt-5 flex flex-col gap-2">
-            {methods.map((m) => {
-              const Icon = m.icon;
-              const on = method === m.k;
-              return (
-                <button key={m.k} onClick={() => setMethod(m.k)} className={cn("flex items-center gap-3 rounded-2xl border p-3.5 text-left", on ? "border-brand-500 bg-brand-50" : "border-line")}>
-                  <span className={cn("flex h-10 w-10 items-center justify-center rounded-xl", on ? "bg-brand-600 text-white" : "bg-canvas")}><Icon className="h-5 w-5" /></span>
-                  <span className="flex-1"><span className="block text-sm font-semibold">{m.k}</span><span className="text-xs text-muted">{m.sub}</span></span>
-                  {on ? <CheckCircle2 className="h-5 w-5 text-brand-600" /> : null}
-                </button>
-              );
-            })}
-          </div>
-          <Button size="lg" className="mt-5 w-full">Pay {naira(total - 130000)}</Button>
-          <p className="mt-3 text-center text-xs text-muted">Secured by Paystack</p>
-        </Card>
-      </div>
+      <PageHeader title="Fees & Payments" subtitle={`${childName(child)} · ${childClass(child)}`} actions={<ChildPicker current={child} />} />
+      <Async data={data} error={error}>
+        {(list) => {
+          if (!list.length) return <Card><Empty title="No bills yet">The school has not issued a bill for {child.firstName} yet.</Empty></Card>;
+          const inv = list.find((i) => i.id === pick) ?? list.find((i) => i.balanceKobo > 0) ?? list[0]!;
+          return (
+            <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
+              <div className="flex flex-col gap-5">
+                {list.length > 1 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {list.map((i) => (
+                      <button key={i.id} onClick={() => setPick(i.id)} className={cn("rounded-2xl px-3.5 py-2 text-sm", i.id === inv.id ? "bg-white font-semibold ring-2 ring-brand-500" : "bg-white/60 text-muted")}>
+                        {i.term} {i.session}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <Card>
+                  <CardHeader title={`${inv.term} ${inv.session}`} subtitle={`Bill ${inv.number}`} action={<StatusBadge status={INVOICE_STATUS[inv.status] ?? inv.status} />} />
+                  <ul className="divide-y divide-line text-sm">
+                    {inv.lines.map((l) => <li key={l.id} className="flex justify-between py-3"><span>{l.name}</span><span className="font-semibold">{naira(l.amountKobo)}</span></li>)}
+                    <li className="flex justify-between py-3 font-semibold"><span>Total</span><span>{naira(inv.totalKobo)}</span></li>
+                    <li className="flex justify-between py-3 text-emerald-600"><span>Paid</span><span>− {naira(inv.paidKobo)}</span></li>
+                    <li className="flex justify-between py-3 text-lg font-bold"><span>Balance</span><span>{naira(inv.balanceKobo)}</span></li>
+                  </ul>
+                  <h4 className="mt-6 mb-3 font-semibold">Payment history</h4>
+                  {inv.payments.length ? (
+                    <ul className="flex flex-col gap-2">
+                      {inv.payments.map((p) => (
+                        <li key={p.id} className="flex items-center justify-between rounded-2xl bg-canvas p-3 text-sm">
+                          <span><span className="block font-semibold">{naira(p.amountKobo)}</span><span className="text-xs text-muted">{dateTime(p.paidAt ?? p.createdAt)} · {p.method === "paystack" ? "Online" : p.method}</span></span>
+                          <StatusBadge status={PAYMENT_STATUS[p.status] ?? p.status} />
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted">No payments yet.</p>
+                  )}
+                </Card>
+              </div>
+              {inv.balanceKobo > 0 ? (
+                <PayBox key={inv.id} invoice={inv} />
+              ) : (
+                <Card className="h-fit text-center"><p className="text-lg font-semibold text-emerald-700">Fully paid</p><p className="mt-1 text-sm text-muted">Thank you. A receipt was sent by SMS.</p></Card>
+              )}
+            </div>
+          );
+        }}
+      </Async>
     </>
   );
+}
+
+export default function Page() {
+  return <Suspense fallback={<Loading />}><Fees /></Suspense>;
 }

@@ -1,139 +1,143 @@
+"use client";
 import Link from "next/link";
-import { ClipboardCheck, MoreHorizontal, PlayCircle, Sparkles, Timer, TrendingUp } from "lucide-react";
+import { ClipboardCheck, FileText, Sparkles, TrendingUp } from "lucide-react";
 import { Hero } from "@/components/widgets/hero";
-import { ScheduleRail } from "@/components/widgets/schedule-rail";
+import { MiniCalendar } from "@/components/widgets/schedule-rail";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { BarChart } from "@/components/charts/bar-chart";
-import { Donut, Legend } from "@/components/charts/donut";
-import { cbtTests, schedule } from "@/lib/mock";
 import { buttonClass } from "@/components/ui/button";
-
-export const metadata = { title: "Student Dashboard" };
-
-const study = [
-  { label: "Mon", value: 1.5 }, { label: "Tue", value: 2.2 }, { label: "Wed", value: 3.4 },
-  { label: "Thu", value: 2.6 }, { label: "Fri", value: 1.1 }, { label: "Sat", value: 2.9 }, { label: "Sun", value: 0.8 },
-];
-
-const subjectsProgress = [
-  { s: "Mathematics", topics: "18 of 24 topics", v: 75 },
-  { s: "Physics", topics: "11 of 20 topics", v: 55 },
-  { s: "English Language", topics: "15 of 18 topics", v: 83 },
-  { s: "Chemistry", topics: "8 of 22 topics", v: 36 },
-];
+import { Async, Empty } from "@/components/ui/feedback";
+import { useApi } from "@/lib/api";
+import { useStudent } from "@/lib/session";
+import { shortDate } from "@/lib/format";
+import { className, type PrepResponse, type PublishedTerm, type StudentTest } from "@/lib/types";
 
 export default function StudentDashboard() {
+  const me = useStudent();
+  const tests = useApi<StudentTest[]>("student/tests");
+  const prep = useApi<PrepResponse>("student/prep/plan?ai=false");
+  const results = useApi<PublishedTerm[]>("student/results");
+  const name = `${me.student.firstName} ${me.student.lastName}`;
+  const cls = me.className ? className({ name: me.className, arm: me.arm }) : "No class yet";
+
   return (
-    <div className="grid gap-6 2xl:grid-cols-[1fr_340px]">
-      <div className="min-w-0">
-        <h1 className="no-print mb-5 text-[28px] font-bold tracking-tight sm:text-4xl">Dashboard</h1>
-        <Hero
-          name="Chiamaka Okafor"
-          line="SS 2 Gold · WAEC 2027 is 186 days away"
-          stats={[
-            { icon: ClipboardCheck, value: "24", label: "Tests completed" },
-            { icon: Timer, value: "58", label: "Hours studied" },
-          ]}
-          asideTitle="Continue Learning"
-          aside={
-            <div>
-              <div className="flex items-center justify-between">
-                <Badge tone="brand">Physics</Badge>
-                <MoreHorizontal className="h-5 w-5 text-muted" />
+    <Async data={prep.data} error={prep.error}>
+      {({ profile }) => {
+        const done = (tests.data ?? []).filter((t) => t.attempt?.submitted);
+        const open = (tests.data ?? []).filter((t) => t.isOpen && !t.attempt?.submitted);
+        const scored = profile.subjects.filter((s) => s.latestScore !== null);
+        const focus = [...profile.subjects].sort((a, b) => b.priority - a.priority).filter((s) => s.priority > 0).slice(0, 4);
+        const next = open[0];
+        return (
+          <div className="grid gap-6 2xl:grid-cols-[1fr_340px]">
+            <div className="min-w-0">
+              <h1 className="mb-5 text-[28px] font-bold tracking-tight sm:text-4xl">Dashboard</h1>
+              <Hero
+                name={name}
+                line={`${cls} · preparing for ${profile.targetExam}`}
+                stats={[
+                  { icon: ClipboardCheck, value: String(done.length), label: "Tests completed" },
+                  { icon: TrendingUp, value: profile.overallAverage === null ? "–" : `${Math.round(profile.overallAverage)}%`, label: "Average, last results" },
+                ]}
+                asideTitle={next ? "Test waiting for you" : "Keep practising"}
+                aside={
+                  next ? (
+                    <div>
+                      <Badge tone="brand">{next.subject}</Badge>
+                      <p className="mt-3 text-lg leading-snug font-semibold">{next.title}</p>
+                      <p className="mt-2 text-sm text-muted">{next.durationMinutes} minutes{next.closesAt ? ` · closes ${shortDate(next.closesAt)}` : ""}</p>
+                      <Link href={`/student/cbt/take?test=${next.id}`} className={buttonClass("primary", "sm", "mt-4 w-full")}>{next.attempt ? "Continue test" : "Start test"}</Link>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-lg leading-snug font-semibold">No tests open right now</p>
+                      <p className="mt-2 text-sm text-muted">A short practice set on your weakest topics is the best use of 15 minutes.</p>
+                      <Link href="/student/prep" className={buttonClass("primary", "sm", "mt-4 w-full")}><Sparkles className="h-4 w-4" /> Exam prep</Link>
+                    </div>
+                  )
+                }
+              />
+
+              <div className="grid gap-5 lg:grid-cols-[1.6fr_1fr]">
+                <Card className="bg-gradient-to-b from-orchid-100/70 to-white">
+                  <CardHeader title="Scores by subject" subtitle={scored[0]?.latestTerm ? `From ${scored[0].latestTerm} results` : "From your released results"} />
+                  {scored.length ? (
+                    <BarChart data={scored.map((s) => ({ label: s.subjectName.split(" ")[0]!, value: Math.round(s.latestScore!) }))} max={100} unit="percent" height={220} />
+                  ) : (
+                    <Empty title="No results released yet" />
+                  )}
+                </Card>
+                <Card>
+                  <CardHeader title="Focus next" subtitle="Picked from your results and tests" action={<Link href="/student/prep" className="text-sm font-semibold text-brand-600">Prep</Link>} />
+                  {focus.length ? (
+                    <ul className="flex flex-col gap-2">
+                      {focus.map((s) => (
+                        <li key={s.subjectId} className="rounded-2xl bg-canvas px-3.5 py-2.5 text-sm">
+                          <span className="flex items-center justify-between gap-2"><span className="font-semibold">{s.subjectName}</span>{s.latestScore !== null ? <span className="text-muted">{Math.round(s.latestScore)}%</span> : null}</span>
+                          <span className="block text-xs text-muted">{s.weakTopics[0] ? `Weak topic: ${s.weakTopics[0].topic}` : s.reasons[0]}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <Empty title="Nothing flagged" >Keep taking tests and the weak spots show here.</Empty>
+                  )}
+                </Card>
               </div>
-              <p className="mt-3 text-lg leading-snug font-semibold">Projectile Motion: WAEC Past Questions</p>
-              <div className="mt-3 flex h-28 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-brand-200 via-orchid-200 to-brand-400">
-                <svg viewBox="0 0 200 90" className="h-full w-full" aria-hidden>
-                  <path d="M10 80 Q 100 -30 190 80" fill="none" stroke="white" strokeWidth="3" strokeDasharray="6 6" />
-                  <circle cx="100" cy="25" r="9" fill="#6a3bf0" />
-                  <line x1="0" y1="82" x2="200" y2="82" stroke="white" strokeWidth="2" opacity=".7" />
-                </svg>
-              </div>
-              <p className="mt-3 text-sm text-muted">Range, time of flight and maximum height, worked step by step.</p>
-              <div className="mt-3 flex items-center justify-between border-t border-line pt-3 text-xs font-medium">
-                <span className="flex items-center gap-1.5"><PlayCircle className="h-4 w-4" /> 12 lessons</span>
-                <span className="flex items-center gap-1.5"><TrendingUp className="h-4 w-4" /> 64% done</span>
-              </div>
+
+              <Card className="mt-5">
+                <CardHeader title="CBT tests" action={<Link href="/student/cbt" className="text-sm font-semibold text-brand-600">See all</Link>} />
+                <Async data={tests.data} error={tests.error}>
+                  {(list) =>
+                    list.length ? (
+                      <ul className="grid gap-3 sm:grid-cols-2">
+                        {list.slice(0, 4).map((t) => (
+                          <li key={t.id} className="flex items-center gap-3 rounded-2xl bg-canvas p-3.5">
+                            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-brand-600"><ClipboardCheck className="h-5 w-5" /></span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-semibold">{t.title}</span>
+                              <span className="block text-xs text-muted">{t.subject} · {t.durationMinutes} min</span>
+                            </span>
+                            {t.attempt?.submitted ? (
+                              <Badge tone="green">{t.attempt.percentage !== null ? `${Math.round(t.attempt.percentage)}%` : "Done"}</Badge>
+                            ) : t.isOpen ? (
+                              <Link href={`/student/cbt/take?test=${t.id}`} className={buttonClass("primary", "sm")}>{t.attempt ? "Continue" : "Start"}</Link>
+                            ) : (
+                              <Badge tone="gray">Not open</Badge>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <Empty title="No tests from your teachers yet" />
+                    )
+                  }
+                </Async>
+              </Card>
             </div>
-          }
-        />
-
-        <div className="mb-4">
-          <h2 className="text-2xl font-semibold tracking-tight">Learning Statistics</h2>
-          <p className="text-sm text-muted">Your study time, tests and subjects this week.</p>
-        </div>
-
-        <div className="grid gap-5 lg:grid-cols-[1.6fr_1fr]">
-          <Card className="bg-gradient-to-b from-orchid-100/70 to-white">
-            <CardHeader
-              title="Study Time"
-              action={<span className="rounded-xl bg-white/70 px-3 py-1.5 text-xs font-medium">This week</span>}
-            />
-            <BarChart data={study} max={4} unit="hours" highlight={2} height={220} />
-          </Card>
-          <Card>
-            <CardHeader title="Test Results" action={<MoreHorizontal className="h-5 w-5 text-muted" />} />
-            <Donut
-              slices={[
-                { label: "A1 – B3", value: 11, color: "#6a3bf0" },
-                { label: "C4 – C6", value: 8, color: "#e879f9" },
-                { label: "D7 – E8", value: 4, color: "#f5d0fe" },
-                { label: "F9", value: 1, color: "#ebe5ff" },
-              ]}
-              centerValue="24"
-              centerLabel="Total tests"
-            />
-            <Legend
-              slices={[
-                { label: "A1 – B3", value: 11, color: "#6a3bf0" },
-                { label: "C4 – C6", value: 8, color: "#e879f9" },
-                { label: "D7 – E8", value: 4, color: "#f5d0fe" },
-                { label: "F9", value: 1, color: "#ebe5ff" },
-              ]}
-            />
-          </Card>
-        </div>
-
-        <div className="mt-5 grid gap-5 lg:grid-cols-2">
-          <Card>
-            <CardHeader title="Subject Progress" subtitle="WAEC syllabus covered" action={<Link href="/student/subjects" className="text-sm font-semibold text-brand-600">See all</Link>} />
-            <ul className="flex flex-col gap-4">
-              {subjectsProgress.map((s) => (
-                <li key={s.s}>
-                  <div className="mb-1.5 flex justify-between text-sm"><span className="font-semibold">{s.s}</span><span className="text-muted">{s.topics}</span></div>
-                  <Progress value={s.v} />
-                </li>
-              ))}
-            </ul>
-          </Card>
-          <Card>
-            <CardHeader title="Upcoming CBT" action={<Link href="/student/cbt" className="text-sm font-semibold text-brand-600">See all</Link>} />
-            <ul className="flex flex-col gap-3">
-              {cbtTests.filter((t) => t.status === "Open").map((t) => (
-                <li key={t.title} className="flex items-center gap-3 rounded-2xl bg-canvas p-3.5">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-brand-600"><ClipboardCheck className="h-5 w-5" /></span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold">{t.title}</span>
-                    <span className="block text-xs text-muted">{t.questions} questions · {t.minutes} min · due {t.due}</span>
-                  </span>
-                  <Link href="/student/cbt/take" className={buttonClass("primary", "sm")}>Start</Link>
-                </li>
-              ))}
-              <li className="flex items-center gap-3 rounded-2xl bg-brand-50 p-3.5">
-                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-600 text-white"><Sparkles className="h-5 w-5" /></span>
-                <span className="flex-1 text-sm"><span className="block font-semibold">Weak topic: Mole concept</span><span className="text-xs text-muted">AI made you a 10-question drill</span></span>
-                <Link href="/student/prep" className={buttonClass("secondary", "sm")}>Practise</Link>
-              </li>
-            </ul>
-          </Card>
-        </div>
-      </div>
-
-      <div className="2xl:pt-[68px]">
-        <ScheduleRail items={schedule} />
-      </div>
-    </div>
+            <div className="2xl:pt-[68px]">
+              <aside className="rounded-3xl bg-white p-5 sm:p-6">
+                <h3 className="mb-4 text-xl font-semibold tracking-tight">Calendar</h3>
+                <MiniCalendar />
+                <div className="mt-5 border-t border-line pt-4">
+                  <p className="mb-2 text-xs font-semibold tracking-wider text-muted uppercase">Report cards</p>
+                  {results.data?.length ? (
+                    <ul className="flex flex-col gap-2">
+                      {results.data.map((t) => (
+                        <li key={t.id}>
+                          <Link href="/student/results" className="flex items-center gap-2 rounded-2xl bg-canvas px-3.5 py-2.5 text-sm font-semibold"><FileText className="h-4 w-4 text-brand-600" /> {t.name} {t.session}</Link>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted">None released yet.</p>
+                  )}
+                </div>
+              </aside>
+            </div>
+          </div>
+        );
+      }}
+    </Async>
   );
 }

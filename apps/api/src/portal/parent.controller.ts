@@ -51,7 +51,7 @@ export class ParentController {
         .leftJoin(classes, eq(classes.id, students.classId))
         .where(eq(studentGuardians.guardianId, p.guardianId))
         .orderBy(asc(students.firstName));
-      return { parent: { id: g.id, fullName: g.fullName, phone: g.phone, email: g.email }, school, children };
+      return { parent: { id: g.id, fullName: g.fullName, phone: g.phone, email: g.email, preferredChannel: g.preferredChannel }, school, children };
     });
   }
 

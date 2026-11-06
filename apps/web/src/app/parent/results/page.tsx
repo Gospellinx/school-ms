@@ -1,6 +1,16 @@
-import { ReportCardView } from "@/components/pages/report-card";
+"use client";
+import { Suspense } from "react";
+import { PublishedResults } from "@/components/pages/published-results";
+import { Card } from "@/components/ui/card";
+import { Empty, Loading } from "@/components/ui/feedback";
+import { ChildPicker, childClass, childName, useChild } from "@/lib/child";
 
-export const metadata = { title: "Results" };
+function Results() {
+  const child = useChild();
+  if (!child) return <Card><Empty title="No children linked yet" /></Card>;
+  return <PublishedResults base={`parent/children/${child.id}/results`} title="Results" subtitle={`${childName(child)} · ${childClass(child)}`} picker={<ChildPicker current={child} />} />;
+}
+
 export default function Page() {
-  return <ReportCardView title="Results" subtitle="Chiamaka Okafor · First Term 2025/2026" />;
+  return <Suspense fallback={<Loading />}><Results /></Suspense>;
 }

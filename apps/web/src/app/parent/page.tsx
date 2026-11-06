@@ -1,97 +1,142 @@
+"use client";
+import { Suspense } from "react";
 import Link from "next/link";
-import { CalendarCheck, FileText, MoreHorizontal, Trophy, Wallet } from "lucide-react";
+import { CalendarCheck, FileText, MessageSquare, Wallet } from "lucide-react";
 import { Hero } from "@/components/widgets/hero";
-import { ScheduleRail } from "@/components/widgets/schedule-rail";
+import { MiniCalendar } from "@/components/widgets/schedule-rail";
 import { Card, CardHeader } from "@/components/ui/card";
-import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { LineChart } from "@/components/charts/line-chart";
 import { Donut, Legend } from "@/components/charts/donut";
 import { buttonClass } from "@/components/ui/button";
-import { messages } from "@/lib/mock";
-import { cn } from "@/lib/utils";
+import { Empty, Loading } from "@/components/ui/feedback";
+import { useApi } from "@/lib/api";
+import { useParent } from "@/lib/session";
+import { ChildPicker, childClass, childName, useChild } from "@/lib/child";
+import { dateTime, longDate, MESSAGE_KINDS, naira, pct, todayLagos } from "@/lib/format";
+import type { InvoiceDetail, Notification, PublishedTerm, StudentAttendance } from "@/lib/types";
 
-export const metadata = { title: "Parent Dashboard" };
+function Dashboard() {
+  const me = useParent();
+  const child = useChild();
+  const id = child?.id;
+  const invoices = useApi<InvoiceDetail[]>(id ? `parent/children/${id}/invoices` : null);
+  const att = useApi<StudentAttendance>(id ? `parent/children/${id}/attendance` : null);
+  const results = useApi<PublishedTerm[]>(id ? `parent/children/${id}/results` : null);
+  const messages = useApi<Notification[]>("parent/messages");
 
-const kids = [
-  { name: "Chiamaka Okafor", cls: "SS 2 Gold", active: true },
-  { name: "Obinna Okafor", cls: "Primary 4", active: false },
-];
-const att = [
-  { label: "Present", value: 58, color: "#6a3bf0" },
-  { label: "Late", value: 2, color: "#e879f9" },
-  { label: "Absent", value: 2, color: "#f5d0fe" },
-];
-const rail = [
-  { time: "Nov 12", title: "Mid-term break begins", sub: "School closes 1:00 pm", tone: "brand" },
-  { time: "Nov 20", title: "PTA general meeting", sub: "Main hall · 10:00 am", tone: "orchid" },
-  { time: "Dec 1", title: "First term exams", sub: "Timetable sent by SMS", tone: "amber" },
-] as const;
+  if (!child) return <Card><Empty title="No children linked yet">Ask the school office to link your phone number to your child.</Empty></Card>;
 
-export default function ParentDashboard() {
+  const owing = (invoices.data ?? []).reduce((n, i) => n + i.balanceKobo, 0);
+  const s = att.data?.summary;
+  const slices = s
+    ? [
+        { label: "Present", value: s.present, color: "#6a3bf0" },
+        { label: "Late", value: s.late, color: "#e879f9" },
+        { label: "Absent", value: s.absent, color: "#f5d0fe" },
+        ...(s.excused ? [{ label: "Excused", value: s.excused, color: "#ebe5ff" }] : []),
+      ]
+    : [];
+  const attended = s ? s.present + s.late : 0;
+  const latest = results.data?.[0];
+  const mine = (messages.data ?? []).filter((m) => !m.studentId || m.studentId === child.id).slice(0, 4);
+
   return (
     <div className="grid gap-6 2xl:grid-cols-[1fr_340px]">
       <div className="min-w-0">
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-[28px] font-bold tracking-tight sm:text-4xl">Dashboard</h1>
-          <div className="flex gap-2">
-            {kids.map((k) => (
-              <span key={k.name} className={cn("flex items-center gap-2 rounded-2xl px-3 py-2 text-sm", k.active ? "bg-white font-semibold ring-2 ring-brand-500" : "bg-white/60 text-muted")}>
-                <Avatar name={k.name} size={28} /> {k.name.split(" ")[0]} <span className="text-xs text-muted">{k.cls}</span>
-              </span>
-            ))}
-          </div>
+          <ChildPicker current={child} />
         </div>
         <Hero
-          name="Mr. Okafor"
-          line="Chiamaka's first term results are out"
+          name={me.parent.fullName}
+          line={`${childName(child)} · ${childClass(child)} · ${me.school.name}`}
           stats={[
-            { icon: Trophy, value: "3rd", label: "In class of 29" },
-            { icon: CalendarCheck, value: "94%", label: "Attendance" },
+            { icon: CalendarCheck, value: s && s.opened ? `${pct(attended, s.opened)}%` : "–", label: "Attendance this year" },
+            { icon: Wallet, value: invoices.data ? naira(owing, { compact: true }) : "…", label: "Fees owing" },
           ]}
-          asideTitle="Fees this term"
+          asideTitle="Latest report card"
           aside={
-            <div>
-              <div className="flex items-center justify-between"><Badge tone="amber">Part paid</Badge><MoreHorizontal className="h-5 w-5 text-muted" /></div>
-              <p className="mt-3 text-sm text-muted">Balance to pay</p>
-              <p className="text-3xl font-bold">₦132,000</p>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-brand-50"><div className="h-full w-1/2 rounded-full bg-brand-600" /></div>
-              <p className="mt-1.5 text-xs text-muted">₦130,000 of ₦262,000 paid · due Nov 30</p>
-              <Link href="/parent/fees" className={buttonClass("primary", "sm", "mt-4 w-full")}><Wallet className="h-4 w-4" /> Pay now</Link>
-            </div>
+            latest ? (
+              <div>
+                <Badge tone="green">Released</Badge>
+                <p className="mt-3 text-lg leading-snug font-semibold">{latest.name} {latest.session}</p>
+                <p className="mt-2 text-sm text-muted">{childName(child)}&apos;s full report card with scores, grades and teacher comments.</p>
+                <Link href={`/parent/results?child=${child.id}`} className={buttonClass("primary", "sm", "mt-4 w-full")}><FileText className="h-4 w-4" /> Open report card</Link>
+              </div>
+            ) : (
+              <div>
+                <p className="text-lg font-semibold">No results released yet</p>
+                <p className="mt-2 text-sm text-muted">You get an SMS as soon as the school publishes them.</p>
+              </div>
+            )
           }
         />
 
-        <div className="grid gap-5 lg:grid-cols-[1.6fr_1fr]">
+        <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
           <Card>
-            <CardHeader title="Average score" subtitle="Chiamaka, last 6 terms" action={<Link href="/parent/results" className="text-sm font-semibold text-brand-600">Report card</Link>} />
-            <LineChart values={[58, 61, 64, 63, 69, 74.6]} labels={["JSS3 T2", "JSS3 T3", "SS1 T1", "SS1 T2", "SS1 T3", "SS2 T1"]} height={210} />
+            <CardHeader title="Attendance" subtitle={att.data ? `Since ${longDate(att.data.from)}` : undefined} action={<Link href={`/parent/attendance?child=${child.id}`} className="text-sm font-semibold text-brand-600">Details</Link>} />
+            {s && s.opened ? (
+              <>
+                <Donut slices={slices} centerValue={String(s.opened)} centerLabel="School days" />
+                <Legend slices={slices} />
+              </>
+            ) : att.data ? (
+              <Empty title="No registers yet" />
+            ) : (
+              <Loading />
+            )}
           </Card>
           <Card>
-            <CardHeader title="Attendance" subtitle="This term" />
-            <Donut slices={att} centerValue="62" centerLabel="School days" />
-            <Legend slices={att} />
+            <CardHeader title="School fees" action={<Link href={`/parent/fees?child=${child.id}`} className="text-sm font-semibold text-brand-600">Pay</Link>} />
+            {invoices.data ? (
+              invoices.data.length ? (
+                <ul className="flex flex-col gap-2">
+                  {invoices.data.map((i) => (
+                    <li key={i.id} className="rounded-2xl bg-canvas px-3.5 py-3 text-sm">
+                      <span className="flex items-center justify-between gap-2"><span className="font-semibold">{i.term} {i.session}</span><Badge tone={i.status === "paid" ? "green" : i.status === "part_paid" ? "amber" : "red"}>{i.status === "paid" ? "Paid" : `${naira(i.balanceKobo)} owing`}</Badge></span>
+                      <span className="block text-xs text-muted">Bill {i.number} · {naira(i.totalKobo)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <Empty title="No bills yet" />
+              )
+            ) : (
+              <Loading />
+            )}
           </Card>
         </div>
 
         <Card className="mt-5">
-          <CardHeader title="From the school" action={<Link href="/parent/messages" className="text-sm font-semibold text-brand-600">All messages</Link>} />
-          <ul className="flex flex-col gap-3">
-            <li className="flex items-center gap-3 rounded-2xl bg-brand-50 p-3.5">
-              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-600 text-white"><FileText className="h-5 w-5" /></span>
-              <span className="flex-1 text-sm"><span className="block font-semibold">First term report card is ready</span><span className="text-xs text-muted">Today · Linx Demo College</span></span>
-              <Link href="/parent/results" className={buttonClass("primary", "sm")}>View</Link>
-            </li>
-            {messages.slice(0, 2).map((m) => (
-              <li key={m.title} className="flex items-center gap-3 rounded-2xl bg-canvas p-3.5 text-sm">
-                <Avatar name="Linx Demo" size={44} className="rounded-xl" />
-                <span className="flex-1"><span className="block font-semibold">{m.title}</span><span className="text-xs text-muted">{m.sent} · {m.channel}</span></span>
-              </li>
-            ))}
-          </ul>
+          <CardHeader title="Messages from school" action={<Link href="/parent/messages" className="text-sm font-semibold text-brand-600">View all</Link>} />
+          {mine.length ? (
+            <ul className="grid gap-3 sm:grid-cols-2">
+              {mine.map((m) => (
+                <li key={m.id} className="flex items-start gap-3 rounded-2xl bg-canvas p-3.5">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-brand-600"><MessageSquare className="h-4 w-4" /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs text-muted"><span className="font-semibold text-ink">{MESSAGE_KINDS[m.kind] ?? m.kind}</span> · {dateTime(m.createdAt)}</span>
+                    <span className="mt-0.5 line-clamp-2 block text-sm">{m.body}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <Empty title="No messages yet" />
+          )}
         </Card>
       </div>
-      <div className="2xl:pt-[68px]"><ScheduleRail title="School Calendar" items={rail} dayLabel="Coming up" /></div>
+      <div className="2xl:pt-[68px]">
+        <aside className="rounded-3xl bg-white p-5 sm:p-6">
+          <h3 className="mb-4 text-xl font-semibold tracking-tight">Calendar</h3>
+          <MiniCalendar />
+          <p className="mt-5 border-t border-line pt-4 text-sm text-muted">Today is <strong className="text-ink">{longDate(todayLagos())}</strong></p>
+        </aside>
+      </div>
     </div>
   );
+}
+
+export default function Page() {
+  return <Suspense fallback={<Loading />}><Dashboard /></Suspense>;
 }

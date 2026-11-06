@@ -1,6 +1,8 @@
+"use client";
 import { TimetableView } from "@/components/pages/timetable";
+import { useStudent } from "@/lib/session";
 
-export const metadata = { title: "Timetable" };
 export default function Page() {
-  return <TimetableView title="Timetable" subtitle="SS 2 Gold · this week" />;
+  const me = useStudent();
+  return <TimetableView title="Timetable" subtitle={[me.className, me.arm].filter(Boolean).join(" ")} items={me.subjects.map((s) => s.name)} />;
 }

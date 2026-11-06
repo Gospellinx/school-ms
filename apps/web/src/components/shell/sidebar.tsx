@@ -1,11 +1,12 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut, PanelLeft, Plus } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { roles, settingsFor, type NavItem, type Role } from "@/lib/roles";
-import { cn } from "@/lib/utils";
+import { signOut, type SessionValue } from "@/lib/session";
+import { cn, initials } from "@/lib/utils";
 import { Logo } from "./logo";
-import { ProfileSwitcher } from "./profile-switcher";
+import { ProfileCard } from "./profile-switcher";
 
 function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean; onNavigate?: () => void }) {
   const Icon = item.icon;
@@ -21,28 +22,46 @@ function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean;
     >
       <Icon className={cn("h-5 w-5", active ? "text-ink" : "text-muted group-hover:text-ink")} strokeWidth={1.8} />
       <span className="flex-1 truncate">{item.label}</span>
-      {item.badge ? (
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-orchid-200 text-xs font-bold text-ink">{item.badge}</span>
-      ) : null}
     </Link>
   );
 }
 
-export function SidebarContent({ role, onNavigate }: { role: Role; onNavigate?: () => void }) {
+const TONES = ["bg-brand-600", "bg-orange-500", "bg-emerald-500", "bg-orchid-400", "bg-sky-500"];
+
+/** The small list under the menu: the parent's children, the student's subjects, the staff member's school. */
+function groupFor(session: SessionValue): { label: string; items: { label: string; href?: string }[] } | null {
+  switch (session.portal) {
+    case "parent":
+      return {
+        label: "My Children",
+        items: session.me.children.map((c) => ({
+          label: `${c.firstName} · ${[c.className, c.arm].filter(Boolean).join(" ")}`,
+          href: `/parent?child=${c.id}`,
+        })),
+      };
+    case "student":
+      return { label: "My Subjects", items: session.me.subjects.slice(0, 6).map((s) => ({ label: s.name, href: "/student/subjects" })) };
+    case "admin":
+    case "teacher":
+      return { label: "School", items: [{ label: session.me.school.name }] };
+    default:
+      return null;
+  }
+}
+
+export function SidebarContent({ role, session, onNavigate }: { role: Role; session: SessionValue; onNavigate?: () => void }) {
   const pathname = usePathname();
   const cfg = roles[role];
   const isActive = (href: string) => (href === `/${role}` ? pathname === href : pathname === href || pathname.startsWith(href + "/"));
+  const group = groupFor(session);
 
   return (
     <div className="flex h-full flex-col gap-6 px-5 py-7">
       <div className="flex items-center justify-between px-1">
         <Logo href={`/${role}`} />
-        <span className="hidden h-9 w-9 items-center justify-center rounded-xl border border-line text-muted lg:flex" aria-hidden>
-          <PanelLeft className="h-4 w-4" />
-        </span>
       </div>
 
-      <ProfileSwitcher role={role} />
+      <ProfileCard session={session} />
 
       <nav className="flex flex-col gap-1">
         <p className="mb-1 px-4 text-xs font-medium tracking-wider text-muted uppercase">Menu</p>
@@ -60,26 +79,41 @@ export function SidebarContent({ role, onNavigate }: { role: Role; onNavigate?: 
         ))}
       </nav>
 
-      <div className="mx-4 border-t border-line" />
+      {group && group.items.length ? (
+        <>
+          <div className="mx-4 border-t border-line" />
+          <div>
+            <p className="mb-2 px-4 text-xs font-medium tracking-wider text-muted uppercase">{group.label}</p>
+            <ul className="flex flex-col gap-1">
+              {group.items.map((g, i) => {
+                const body = (
+                  <>
+                    <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold text-white", TONES[i % TONES.length])}>
+                      {initials(g.label.replace(/[^A-Za-z ]/g, " "))}
+                    </span>
+                    <span className="truncate">{g.label}</span>
+                  </>
+                );
+                return (
+                  <li key={g.label}>
+                    {g.href ? (
+                      <Link href={g.href} onClick={onNavigate} className="flex items-center gap-3 rounded-2xl px-4 py-2 text-sm font-medium hover:bg-canvas">
+                        {body}
+                      </Link>
+                    ) : (
+                      <span className="flex items-center gap-3 rounded-2xl px-4 py-2 text-sm font-medium">{body}</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </>
+      ) : null}
 
-      <div>
-        <div className="mb-2 flex items-center justify-between px-4">
-          <p className="text-xs font-medium tracking-wider text-muted uppercase">{cfg.groupLabel}</p>
-          <Plus className="h-4 w-4 text-muted" />
-        </div>
-        <ul className="flex flex-col gap-1">
-          {cfg.group.map((g) => (
-            <li key={g.label} className="flex items-center gap-3 rounded-2xl px-4 py-2 text-sm font-medium">
-              <span className={cn("flex h-7 w-7 items-center justify-center rounded-lg text-[11px] font-bold text-white", g.tone)}>{g.tag}</span>
-              <span className="truncate">{g.label}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <Link href="/" className="mt-auto flex h-11 items-center gap-3 rounded-2xl px-4 text-sm font-medium text-muted hover:bg-canvas hover:text-ink">
+      <button onClick={signOut} className="mt-auto flex h-11 items-center gap-3 rounded-2xl px-4 text-sm font-medium text-muted hover:bg-canvas hover:text-ink">
         <LogOut className="h-5 w-5" strokeWidth={1.8} /> Log out
-      </Link>
+      </button>
     </div>
   );
 }

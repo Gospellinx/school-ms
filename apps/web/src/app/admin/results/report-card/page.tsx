@@ -1,6 +1,14 @@
-import { ReportCardView } from "@/components/pages/report-card";
+"use client";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { StaffReportCard } from "@/components/pages/staff-report-card";
+import { Loading } from "@/components/ui/feedback";
 
-export const metadata = { title: "Report Card" };
+function Inner() {
+  const q = useSearchParams();
+  return <StaffReportCard termId={q.get("term") ?? ""} studentId={q.get("student") ?? ""} backHref={`/admin/results?term=${q.get("term") ?? ""}&class=${q.get("class") ?? ""}`} />;
+}
+
 export default function Page() {
-  return <ReportCardView title="Report Card" subtitle="Chiamaka Okafor · SS 2 Gold" />;
+  return <Suspense fallback={<Loading />}><Inner /></Suspense>;
 }

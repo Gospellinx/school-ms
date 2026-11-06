@@ -5,9 +5,10 @@ import { cn } from "@/lib/utils";
 
 const days = ["S", "M", "T", "W", "T", "F", "S"];
 
-export function MiniCalendar({ marked = [6, 12, 20] }: { marked?: number[] }) {
+export function MiniCalendar({ marked = [] }: { marked?: number[] }) {
   const [offset, setOffset] = React.useState(0);
-  const base = new Date(2026, 10 + offset, 1);
+  const now = new Date();
+  const base = new Date(now.getFullYear(), now.getMonth() + offset, 1);
   const month = base.toLocaleString("en-GB", { month: "long", year: "numeric" });
   const startDay = base.getDay();
   const daysInMonth = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
@@ -16,7 +17,7 @@ export function MiniCalendar({ marked = [6, 12, 20] }: { marked?: number[] }) {
   for (let i = startDay - 1; i >= 0; i--) cells.push({ d: prevDays - i, muted: true });
   for (let d = 1; d <= daysInMonth; d++) cells.push({ d, muted: false });
   while (cells.length % 7) cells.push({ d: cells.length - daysInMonth - startDay + 1, muted: true });
-  const today = offset === 0 ? 5 : -1;
+  const today = offset === 0 ? now.getDate() : -1;
 
   return (
     <div>
@@ -47,36 +48,5 @@ export function MiniCalendar({ marked = [6, 12, 20] }: { marked?: number[] }) {
         ))}
       </div>
     </div>
-  );
-}
-
-export interface RailItem { time: string; title: string; sub: string; tone: "brand" | "orchid" | "amber" }
-
-const tones = {
-  brand: "border-brand-600 bg-brand-50",
-  orchid: "border-fuchsia-500 bg-orchid-100",
-  amber: "border-amber-500 bg-amber-50",
-};
-
-export function ScheduleRail({ title = "My Schedule", items, dayLabel = "Thursday, 5 November" }: { title?: string; items: readonly RailItem[]; dayLabel?: string }) {
-  return (
-    <aside className="rounded-3xl bg-white p-5 sm:p-6">
-      <h3 className="mb-4 text-xl font-semibold tracking-tight">{title}</h3>
-      <MiniCalendar />
-      <div className="mt-6 border-t border-line pt-5">
-        <p className="mb-3 font-semibold">{dayLabel}</p>
-        <ol className="flex flex-col gap-3">
-          {items.map((it) => (
-            <li key={it.time + it.title} className="grid grid-cols-[56px_1fr] gap-3">
-              <span className="pt-2 text-xs text-muted">{it.time}</span>
-              <span className={cn("rounded-2xl border-l-4 px-3.5 py-2.5", tones[it.tone])}>
-                <span className="block text-sm font-semibold">{it.title}</span>
-                <span className="block text-xs text-muted">{it.sub}</span>
-              </span>
-            </li>
-          ))}
-        </ol>
-      </div>
-    </aside>
   );
 }

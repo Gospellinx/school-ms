@@ -1,12 +1,20 @@
+"use client";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/shell/page-header";
 import { ScoreSheet } from "@/components/pages/score-sheet";
+import { Loading } from "@/components/ui/feedback";
 
-export const metadata = { title: "Score Entry" };
+function Inner() {
+  const q = useSearchParams();
+  return <ScoreSheet initial={{ classId: q.get("class") ?? undefined, subjectId: q.get("subject") ?? undefined }} />;
+}
+
 export default function Page() {
   return (
     <>
       <PageHeader title="Score Entry" subtitle="Type scores like a spreadsheet. Totals and grades update as you type." />
-      <ScoreSheet />
+      <Suspense fallback={<Loading />}><Inner /></Suspense>
     </>
   );
 }
