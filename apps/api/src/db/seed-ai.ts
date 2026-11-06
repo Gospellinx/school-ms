@@ -421,4 +421,43 @@ export async function seedAiLearning(ctx: AiSeedContext) {
   // A JSS 3 student preparing for BECE.
   const jss3 = await login(ctx.jss3Student);
   await call(jss3, 'PUT', 'student/exams/goal', { exam: 'bece', subjectIds: [S.MTH, S.ENG, S.BST] });
+
+  await seedTeacherAssistant(ctx);
+}
+
+// ---------------------------------------------------------------- Teacher assistant (phase 2)
+
+/** Mr Bakare (teacher@demo.test) has a saved lesson plan and a theory question half marked. */
+async function seedTeacherAssistant(ctx: AiSeedContext) {
+  const { call, tokens } = ctx;
+  const bakare = tokens.bakare;
+  const mine: Json[] = await call(bakare, 'GET', 'my-assignments');
+  const ss2 = mine.find((a) => a.className === 'SS 2' && a.subjectName === 'Mathematics');
+  if (!ss2) throw new Error('Seed: Mr Bakare should teach SS 2 Mathematics');
+  const base = { classId: ss2.classId, subjectId: ss2.subjectId };
+
+  const plan: Json = await call(bakare, 'POST', 'assistant/lesson', { ...base, kind: 'lesson_plan', topic: 'Logarithms', durationMinutes: 40 });
+  await call(bakare, 'POST', 'assistant/save', { ...base, kind: 'lesson_plan', title: 'Logarithms (lesson plan)', body: plan.body });
+
+  const context: Json = await call(bakare, 'GET', `assistant/context?classId=${base.classId}&subjectId=${base.subjectId}`);
+  const task: Json = await call(bakare, 'POST', 'assistant/essays', {
+    ...base,
+    title: 'Logarithms theory (2nd CA)',
+    question: 'Without using tables, evaluate log₂ 8 + log₃ 27 − log₅ 25. Show your working.',
+    rubricText: 'log2 8 = 3 (1)\nlog3 27 = 3 (1)\nlog5 25 = 2 (1)\nFinal answer 3 + 3 - 2 = 4 (2)',
+    termId: context.term?.id ?? null,
+    scoreComponent: 'ca2',
+  });
+  const roster: Json[] = (await call(bakare, 'GET', `assistant/essays/${task.id}`)).students;
+  const answers = [
+    'log2 8 = 3 because 2 cubed is 8. log3 27 = 3. log5 25 = 2. So 3 + 3 - 2 = 4.',
+    'log2 8 = 3, log3 27 = 3 and log5 25 = 5. Answer = 1',
+    '2^3 = 8 so log2 8 = 3. 3^3 = 27 so log3 27 = 3. Answer 6',
+    'log 8 + log 27 - log 25 = log (8 x 27 / 25) = 0.94',
+  ];
+  for (const [i, text] of answers.entries()) {
+    const student = roster[i];
+    const script: Json = await call(bakare, 'PUT', `assistant/essays/${task.id}/scripts/${student.studentId}`, { answer: text });
+    if (i < 2) await call(bakare, 'PATCH', `assistant/essays/${task.id}/scripts/${student.studentId}`, { awarded: i === 0 ? 5 : script.suggestion.total });
+  }
 }
