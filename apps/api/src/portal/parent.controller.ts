@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { and, asc, eq } from 'drizzle-orm';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { and, asc, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { AttendanceService } from '../attendance/attendance.service';
 import { ParentPrincipal } from '../auth/auth.types';
@@ -7,13 +7,14 @@ import { CurrentUser, ForAudience } from '../auth/decorators';
 import { todayInLagos } from '../common/access';
 import { found, parse, uuidParam } from '../common/validation';
 import { DbService } from '../db/db.service';
-import { classes, guardians, invoices, schools, studentGuardians, students } from '../db/schema';
+import { classes, guardians, invoices, notifications, schools, studentGuardians, students } from '../db/schema';
 import { FeesService } from '../fees/fees.service';
 import { PortalResultsService } from './portal-results.service';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
 const rangeSchema = z.object({ from: isoDate, to: isoDate });
 const paySchema = z.object({ amountKobo: z.number().int().positive().optional() });
+const prefsSchema = z.object({ preferredChannel: z.enum(['sms', 'whatsapp']) });
 
 /** The parent portal: a parent's children, their released results, attendance and fees. */
 @ForAudience('parent')
@@ -52,6 +53,38 @@ export class ParentController {
         .orderBy(asc(students.firstName));
       return { parent: { id: g.id, fullName: g.fullName, phone: g.phone, email: g.email }, school, children };
     });
+  }
+
+  /** How the school reaches this parent: SMS or WhatsApp. */
+  @Patch('me')
+  updateMe(@CurrentUser() p: ParentPrincipal, @Body() body: unknown) {
+    const input = parse(prefsSchema, body);
+    return this.dbs.withSchool(p.schoolId, async (tx) => {
+      const [g] = await tx.update(guardians).set(input).where(eq(guardians.id, p.guardianId)).returning();
+      found(g, 'Parent');
+      return { id: g.id, preferredChannel: g.preferredChannel };
+    });
+  }
+
+  /** Messages the school has sent this parent (results, absences, receipts, notices). */
+  @Get('messages')
+  messages(@CurrentUser() p: ParentPrincipal) {
+    return this.dbs.withSchool(p.schoolId, (tx) =>
+      tx
+        .select({
+          id: notifications.id,
+          kind: notifications.kind,
+          channel: notifications.channel,
+          body: notifications.body,
+          status: notifications.status,
+          studentId: notifications.studentId,
+          createdAt: notifications.createdAt,
+        })
+        .from(notifications)
+        .where(eq(notifications.guardianId, p.guardianId))
+        .orderBy(desc(notifications.createdAt))
+        .limit(100),
+    );
   }
 
   @Get('children/:studentId/results')

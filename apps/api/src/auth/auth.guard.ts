@@ -25,12 +25,14 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException();
     }
 
-    const audience: Audience = payload.role === 'parent' ? 'parent' : payload.role === 'student' ? 'student' : 'staff';
+    const audience: Audience =
+      payload.role === 'parent' || payload.role === 'student' || payload.role === 'platform' ? payload.role : 'staff';
     const allowed = this.reflector.getAllAndOverride<Audience[] | undefined>(AUDIENCE_KEY, targets) ?? ['staff'];
     if (!allowed.includes(audience)) throw new ForbiddenException('This account cannot use this page');
 
     if (audience === 'parent') req.user = { guardianId: payload.sub, schoolId: payload.school, role: 'parent' };
     else if (audience === 'student') req.user = { studentId: payload.sub, schoolId: payload.school, role: 'student' };
+    else if (audience === 'platform') req.user = { adminId: payload.sub, role: 'platform' };
     else req.user = { staffId: payload.sub, schoolId: payload.school, role: payload.role };
 
     const roles = this.reflector.getAllAndOverride<Role[] | undefined>(ROLES_KEY, targets);

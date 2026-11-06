@@ -22,6 +22,7 @@ import {
   students,
   subjects,
   terms,
+  resultPublications,
 } from '../db/schema';
 import { CbtService } from '../cbt/cbt.service';
 import { ResultsService } from '../results/results.service';
@@ -186,6 +187,8 @@ export class PrepService {
       .innerJoin(academicSessions, eq(academicSessions.id, terms.sessionId))
       .innerJoin(classes, eq(classes.id, scores.classId))
       .innerJoin(sections, eq(sections.id, classes.sectionId))
+      // Released results only: a term still being entered (CAs in, no exam yet) would read as a collapse.
+      .innerJoin(resultPublications, and(eq(resultPublications.termId, scores.termId), eq(resultPublications.classId, scores.classId)))
       .where(eq(scores.studentId, studentId));
     const results: SubjectTermResult[] = [];
     for (const r of rows) {

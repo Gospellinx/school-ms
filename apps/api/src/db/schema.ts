@@ -587,3 +587,15 @@ export const tenantTables = [
   'question_explanations',
   'ai_usage',
 ] as const;
+
+/**
+ * Linx School platform staff (super admins). Not tied to a school, so there is no row-level
+ * security here; school-scoped transactions (role school_app) cannot read this table.
+ */
+export const platformAdmins = pgTable('platform_admins', {
+  id: id(),
+  fullName: text('full_name').notNull(),
+  email: text('email').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  createdAt: createdAt(),
+});

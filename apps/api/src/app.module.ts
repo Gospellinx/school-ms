@@ -28,6 +28,9 @@ import { ResultsService } from './results/results.service';
 import { SetupController } from './setup/setup.controller';
 import { StudentsController } from './students/students.controller';
 
+import { PlatformController } from './platform/platform.controller';
+import { DashboardController } from './dashboard/dashboard.controller';
+
 @Module({
   imports: [DbModule, AuthModule],
   controllers: [
@@ -45,6 +48,8 @@ import { StudentsController } from './students/students.controller';
     PortalAuthController,
     ParentController,
     StudentController,
+    PlatformController,
+    DashboardController,
   ],
   providers: [
     ResultsService,

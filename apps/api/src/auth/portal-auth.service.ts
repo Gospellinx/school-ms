@@ -1,3 +1,4 @@
+import { config } from '../common/config';
 import { HttpException, HttpStatus, Injectable, Logger, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { normalizeNigerianPhone } from '@school-ms/core';
 import bcrypt from 'bcryptjs';
@@ -13,6 +14,11 @@ const MAX_CODE_ATTEMPTS = 5;
 const MAX_CODES_PER_HOUR = 5;
 const PIN_LOCK_FAILURES = 10;
 const PIN_LOCK_MS = 15 * 60 * 1000;
+
+/** True only outside production when no SMS provider is set: messages are logged, not sent. */
+function showCodesInDev(): boolean {
+  return process.env.NODE_ENV !== 'production' && config.messagingProvider() === 'log';
+}
 
 function codeSecret(): string {
   return process.env.JWT_SECRET ?? 'dev-only-secret-change-me';
@@ -44,7 +50,7 @@ export class PortalAuthService {
    * Texts a 6-digit login code to a parent's phone. Always answers the same way,
    * so it cannot be used to find out which numbers are registered.
    */
-  async requestParentCode(schoolSlug: string, rawPhone: string): Promise<{ sent: true }> {
+  async requestParentCode(schoolSlug: string, rawPhone: string): Promise<{ sent: true; devCode?: string }> {
     const school = await this.schoolBySlug(schoolSlug);
     const phone = normalizeNigerianPhone(rawPhone);
     if (!school || !phone) return { sent: true };
@@ -81,6 +87,8 @@ export class PortalAuthService {
       this.logger.error(`Could not send login code: ${(err as Error).message}`);
       throw new ServiceUnavailableException('We could not send the code. Please try again.');
     }
+    // Without an SMS provider (local demo), hand the code back so the parent portal can be tried.
+    if (showCodesInDev()) return { sent: true, devCode: issued.code };
     return { sent: true };
   }
 

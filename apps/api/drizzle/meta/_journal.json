@@ -36,6 +36,13 @@
       "when": 1793890195603,
       "tag": "0004_features_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793952832382,
+      "tag": "0005_platform_admins",
+      "breakpoints": true
     }
   ]
 }

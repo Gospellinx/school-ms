@@ -21,5 +21,11 @@ export interface StudentPrincipal {
   role: 'student';
 }
 
-export type Audience = 'staff' | 'parent' | 'student';
-export type TokenRole = Role | 'parent' | 'student';
+/** Linx School platform staff (super admin): sees every school, but no school's private records. */
+export interface PlatformPrincipal {
+  adminId: string;
+  role: 'platform';
+}
+
+export type Audience = 'staff' | 'parent' | 'student' | 'platform';
+export type TokenRole = Role | 'parent' | 'student' | 'platform';

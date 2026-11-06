@@ -87,7 +87,7 @@ export class AuthService {
   }
 
   /** Staff tokens last 12 hours, parent tokens 30 days (they log in on their phones), student tokens 6 hours. */
-  sign(subjectId: string, schoolId: string, role: TokenRole): Promise<string> {
+  sign(subjectId: string, schoolId: string | null, role: TokenRole): Promise<string> {
     const expiresIn = role === 'parent' ? '30d' : role === 'student' ? '6h' : '12h';
     return this.jwt.signAsync({ sub: subjectId, school: schoolId, role }, { expiresIn });
   }
