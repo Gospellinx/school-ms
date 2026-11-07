@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext } from 'react';
+import { clearOfflineData, outboxItems } from './offline';
 import type { ParentMe, PlatformMe, StaffMe, StudentMe } from './types';
 
 /** Who is signed in, loaded once per portal by its layout. */
@@ -63,6 +64,10 @@ export function sessionUser(s: SessionValue): { name: string; subtitle: string }
 export const roleLabel = (r: string) => ({ proprietor: 'Proprietor', admin: 'School admin', teacher: 'Teacher' })[r] ?? r;
 
 export async function signOut() {
+  const waiting = (await outboxItems().catch(() => [])).filter((i) => !i.failed);
+  if (waiting.length && !window.confirm(`${waiting.length} saved change(s) on this phone have not synced yet: ${waiting.map((i) => i.label).join(', ')}. Sign out and lose them?`)) return;
   await fetch('/session/logout', { method: 'POST' });
+  // Shared phones: the next person must not see this person's offline copies.
+  await clearOfflineData();
   window.location.href = '/';
 }

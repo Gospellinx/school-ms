@@ -53,4 +53,7 @@
   .no-print { display: none !important; }
   .print-sheet { box-shadow: none !important; border: 0 !important; margin: 0 !important; padding: 0 !important; max-width: none !important; }
   .print-area { padding: 0 !important; margin: 0 !important; }
+  /* Lesson notes book: each note or plan starts on a new page. */
+  .lesson-book .lesson-page { break-before: page; border-top: 0 !important; margin-top: 0 !important; padding-top: 0 !important; }
+  .lesson-book table, .lesson-book .rounded-xl { break-inside: avoid; }
 }

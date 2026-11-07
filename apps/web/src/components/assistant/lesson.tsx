@@ -124,14 +124,15 @@ export function LessonTab({ ctx }: { ctx: AssistantContext }) {
                 disabled={save.busy}
                 onClick={() =>
                   save.run(
-                    () => api("assistant/save", { method: "POST", body: { classId: ctx.class.id, subjectId: ctx.subject.id, kind, title, body } }),
-                    kind === "lesson_note" ? "Saved to the knowledge base. Students can read it and the tutor will use it." : "Saved to the knowledge base for staff.",
+                    () => api("assistant/save", { method: "POST", body: { classId: ctx.class.id, subjectId: ctx.subject.id, kind, title, body, week: pick === "custom" ? null : (chosen?.week ?? null) } }),
+                    `${kind === "lesson_note" ? "Saved to the knowledge base. Students can read it and the tutor will use it." : "Saved to the knowledge base for staff."} It is also in your lesson notes book for inspection.`,
                   )
                 }
               >
                 <Save className="h-4 w-4" /> Save to knowledge base
               </Button>
               <SuccessNote className="flex-1">{save.notice}</SuccessNote>
+              {save.notice ? <a href="/teacher/lesson-notes" className="text-sm font-semibold text-brand-600">Open lesson notes book</a> : null}
               <ErrorNote className="flex-1">{save.error}</ErrorNote>
             </div>
           </>
