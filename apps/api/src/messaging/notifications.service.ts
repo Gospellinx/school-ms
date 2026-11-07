@@ -4,6 +4,7 @@ import { config } from '../common/config';
 import { Tx } from '../db/client';
 import { DbService } from '../db/db.service';
 import { guardians, notifications, schools, studentGuardians, students } from '../db/schema';
+import { EmailProvider } from './email.provider';
 import { MessagingProvider } from './messaging.provider';
 
 type StudentRow = typeof students.$inferSelect;
@@ -22,6 +23,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly dbs: DbService,
     private readonly provider: MessagingProvider,
+    private readonly email: EmailProvider,
   ) {}
 
   onModuleInit() {
@@ -48,7 +50,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     studentIds: string[],
     kind: string,
     body: (student: StudentRow) => string,
-    opts: { oncePerGuardian?: boolean } = {},
+    opts: { oncePerGuardian?: boolean; /** Also email parents who have an address, with this subject. */ emailSubject?: string } = {},
   ): Promise<number> {
     if (studentIds.length === 0) return 0;
     const rows = await tx
@@ -63,17 +65,22 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       targets = rows.filter((r) => !seen.has(r.guardian.id) && seen.add(r.guardian.id));
     }
     if (targets.length === 0) return 0;
-    await tx.insert(notifications).values(
-      targets.map((r) => ({
-        schoolId,
-        channel: r.guardian.preferredChannel,
-        to: r.guardian.phone,
-        body: body(r.student),
-        kind,
-        guardianId: r.guardian.id,
-        studentId: r.student.id,
-      })),
-    );
+    const values: (typeof notifications.$inferInsert)[] = targets.map((r) => ({
+      schoolId,
+      channel: r.guardian.preferredChannel,
+      to: r.guardian.phone,
+      body: body(r.student),
+      kind,
+      guardianId: r.guardian.id,
+      studentId: r.student.id,
+    }));
+    if (opts.emailSubject) {
+      for (const r of targets) {
+        if (!r.guardian.email) continue;
+        values.push({ schoolId, channel: 'email', to: r.guardian.email, subject: opts.emailSubject, body: body(r.student), kind, guardianId: r.guardian.id, studentId: r.student.id });
+      }
+    }
+    await tx.insert(notifications).values(values);
     return targets.length;
   }
 
@@ -116,9 +123,16 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
 
     let sent = 0;
     let failed = 0;
+    let school: { name: string; email: string | null } | undefined;
     for (const n of claimed) {
       try {
-        const { providerRef } = await this.provider.send({ channel: n.channel, to: n.to, body: n.body });
+        let providerRef: string | undefined;
+        if (n.channel === 'email') {
+          school ??= (await this.dbs.db.select({ name: schools.name, email: schools.email }).from(schools).where(eq(schools.id, schoolId)))[0];
+          ({ providerRef } = await this.email.send({ to: n.to, subject: n.subject ?? school?.name ?? 'Message from school', text: n.body, fromName: school?.name, replyTo: school?.email }));
+        } else {
+          ({ providerRef } = await this.provider.send({ channel: n.channel, to: n.to, body: n.body }));
+        }
         await this.dbs.withSchool(schoolId, (tx) =>
           tx.update(notifications).set({ status: 'sent', providerRef, sentAt: new Date(), error: null }).where(eq(notifications.id, n.id)),
         );

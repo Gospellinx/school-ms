@@ -12,3 +12,4 @@ export * from './teaching';
 export * from './snap';
 export * from './lesson-book';
 export * from './forecast';
+export * from './autopilot';

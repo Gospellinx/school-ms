@@ -6,6 +6,7 @@ import { academicSessions, resultPublications, schools, scores, studentGuardians
 import { DbService } from '../db/db.service';
 import { FeesService } from '../fees/fees.service';
 import { ResultsService } from '../results/results.service';
+import { planReleasesResults } from '../autopilot/plans';
 
 /** Rules for what parents and students may see: published results only, and fees if the school requires it. */
 @Injectable()
@@ -52,7 +53,7 @@ export class PortalResultsService {
       const [school] = await this.dbs.db.select().from(schools).where(eq(schools.id, schoolId));
       if (school.withholdResultsForDebt) {
         const owed = await this.fees.balanceFor(tx, termId, studentId);
-        if (owed > 0) {
+        if (owed > 0 && !(await planReleasesResults(tx, termId, studentId))) {
           throw new HttpException(
             { message: `Please clear the outstanding fees of ${formatNaira(owed)} to view this result`, balanceKobo: owed },
             HttpStatus.PAYMENT_REQUIRED,

@@ -67,6 +67,10 @@ export const MESSAGE_KINDS: Record<string, string> = {
   fee_reminder: 'Fee reminder',
   broadcast: 'School notice',
   login_code: 'Login code',
+  payment_plan: 'Payment plan',
+  weekly_report: 'Weekly report',
+  daily_summary: 'Daily summary',
+  follow_up: 'Follow-up',
 };
 
 export const INVOICE_STATUS: Record<string, string> = { paid: 'Paid', part_paid: 'Part paid', unpaid: 'Owing' };

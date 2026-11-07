@@ -280,6 +280,108 @@ export interface InvoiceDetail extends Invoice {
   session: string;
   lines: { id: string; name: string; amountKobo: number }[];
   payments: { id: string; amountKobo: number; method: string; status: string; reference: string; paidAt: string | null; note: string | null; createdAt: string }[];
+  plan: PaymentPlan | null;
+}
+
+// ---------------------------------------------------------------- Autopilot
+
+export interface Instalment { dueOn: string; amountKobo: number }
+
+export interface PaymentPlan {
+  id: string;
+  schedule: Instalment[];
+  paidBeforeKobo: number;
+  note: string | null;
+  createdAt: string;
+  progress: { dueSoFarKobo: number; behindKobo: number; onTrack: boolean; next: (Instalment & { outstandingKobo: number }) | null };
+}
+
+export type FollowUpChannel = "preferred" | "sms" | "whatsapp" | "email";
+export type SequenceTrigger = "fee_overdue" | "new_parent" | "absent_streak";
+
+export interface SequenceStep { offsetDays: number; channels: FollowUpChannel[]; subject: string; body: string }
+
+export interface Sequence {
+  id: string;
+  trigger: SequenceTrigger;
+  name: string;
+  enabled: boolean;
+  steps: SequenceStep[];
+  threshold: number | null;
+  enabledAt: string | null;
+}
+
+export interface DigestRecipient { name: string; phone?: string | null; email?: string | null; channel: "sms" | "whatsapp" | "email" }
+
+export interface AutomationSettings {
+  feeDueDays: number;
+  holdAllowsPlans: boolean;
+  weeklyReport: boolean;
+  weeklyDay: number;
+  weeklyHour: number;
+  weeklyChannels: FollowUpChannel[];
+  dailySummary: boolean;
+  dailyHour: number;
+  digestRecipients: DigestRecipient[];
+  sendFrom: number;
+  sendUntil: number;
+}
+
+export interface Providers { sms: string; email: string; paystack: string }
+
+export interface AutopilotOverview { settings: AutomationSettings; sequences: Sequence[]; feeDueDate: string | null; providers: Providers }
+
+export interface AutomationRun {
+  id: string;
+  key: string;
+  kind: string;
+  step: number | null;
+  messages: number;
+  summary: string | null;
+  student: string | null;
+  createdAt: string;
+}
+
+export interface AutopilotActivity {
+  now: string;
+  sendingNow: boolean;
+  providers: Providers;
+  schedule: {
+    window: { from: number; until: number };
+    weeklyReport: { date: string; hour: number } | null;
+    dailySummary: { date: string; hour: number } | null;
+    sequences: { trigger: SequenceTrigger; name: string; enabled: boolean }[];
+  };
+  today: { channel: "sms" | "whatsapp" | "email"; status: string; n: number }[];
+  failures: { id: string; channel: string; to: string; kind: string; error: string | null; createdAt: string }[];
+  runs: AutomationRun[];
+}
+
+export interface FeeRecovery {
+  enabled: boolean;
+  term: { id: string; name: string; startsOn: string | null } | null;
+  dueDate: string | null;
+  feeDueDays: number;
+  withholdResultsForDebt: boolean;
+  holdAllowsPlans: boolean;
+  owingBills: number;
+  owingKobo: number;
+  reminders: { step: number; offsetDays: number; subject: string; sent: number; messages: number }[];
+  recoveredKobo: number;
+  recoveredBills: number;
+  plans: { total: number; onTrack: number; behindKobo: number };
+  dueToday: { invoiceId: string; student: string; step: number; amountDueKobo: number; dueDate: string; plan: { index: number; count: number } | null }[];
+}
+
+export interface PlanRow {
+  invoiceId: string;
+  number: string;
+  term: string;
+  student: { id: string; name: string };
+  totalKobo: number;
+  paidKobo: number;
+  balanceKobo: number;
+  plan: PaymentPlan;
 }
 
 export interface FeeSummary {
