@@ -1,4 +1,4 @@
-import { Activity, BarChart3, BookCheck, BookOpen, Bot, CalendarCheck, CalendarDays, ClipboardList, CreditCard, FileText, GraduationCap, LayoutDashboard, Library, LifeBuoy, MessageSquare, MonitorCheck, School, Settings, ShieldCheck, Sparkles, Target, UserCog, Users, Wallet, type LucideIcon } from "lucide-react";
+import { Activity, BarChart3, BookCheck, BookOpen, Bot, CalendarCheck, CalendarDays, ClipboardList, CreditCard, FileText, Globe, GraduationCap, LayoutDashboard, Library, LifeBuoy, MessageSquare, MonitorCheck, School, Settings, ShieldCheck, Sparkles, Target, UserCog, UserPlus, Users, Wallet, type LucideIcon } from "lucide-react";
 
 export type Role = "super-admin" | "admin" | "teacher" | "student" | "parent";
 
@@ -34,6 +34,8 @@ export const roles: Record<Role, RoleConfig> = {
       { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
       { label: "Live Monitor", href: "/admin/live", icon: Activity },
       { label: "Exam Forecast", href: "/admin/forecast", icon: Target },
+      { label: "Admissions", href: "/admin/admissions", icon: UserPlus },
+      { label: "Website", href: "/admin/website", icon: Globe },
       { label: "Students", href: "/admin/students", icon: GraduationCap },
       { label: "Staff", href: "/admin/staff", icon: Users },
       { label: "Classes & Subjects", href: "/admin/classes", icon: BookOpen },

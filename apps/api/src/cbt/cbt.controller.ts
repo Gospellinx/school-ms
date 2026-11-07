@@ -12,7 +12,8 @@ const testSchema = z.object({
   durationMinutes: z.number().int().min(1).max(300),
   opensAt: z.string().datetime({ offset: true }).optional(),
   closesAt: z.string().datetime({ offset: true }).optional(),
-  classIds: z.array(z.string().uuid()).min(1),
+  /** Empty only for entrance exams. */
+  classIds: z.array(z.string().uuid()).default([]),
   questionIds: z.array(z.string().uuid()).max(200).default([]),
   /** Optional marks per question id; 1 by default. */
   marks: z.record(z.string().uuid(), z.number().int().min(1).max(20)).optional(),
@@ -20,6 +21,7 @@ const testSchema = z.object({
   showResults: z.boolean().default(true),
   /** e.g. "ca1": lets the teacher push CBT scores into that column of the term's score sheet. */
   scoreComponent: z.string().regex(/^[a-z0-9_]+$/).optional(),
+  purpose: z.enum(['class', 'entrance']).default('class'),
 });
 
 /** Teachers set computer-based tests from the question bank and see results. */

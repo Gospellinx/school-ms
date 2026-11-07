@@ -26,6 +26,8 @@ It covers setting up the school, scores, broadsheets and report cards, plus pare
   - **Guardrails**: safety screening of student messages with flags for leadership, a monthly AI allowance per school and a daily limit per student, cost logged per feature.
   - **Teaching Assistant** (phase 2): lesson notes and plans from the scheme of work, tests with marking schemes, help marking written answers against a rubric (the teacher confirms every mark before it reaches the score sheet), report remarks for a whole class, and a list of students falling behind.
   - Works without an Anthropic key: the tutor and knowledge base fall back to the school's notes and question bank.
+- **School website and online admissions**: every school gets a public website at `/s/<school>` (about, highlights, sections, admissions, contact, WhatsApp) that leadership edits under Admin > Website. Families apply online, pay the application form fee through Paystack (into the school's own subaccount, through the same signed webhook as school fees), and follow a private status page. Classes with an entrance exam use a CBT test built from the school's question bank and graded by the same CBT engine; applicants sit it at home or in the CBT centre inside a window the school sets, with autosave and a server-side clock. Leadership works the pipeline (applied, entrance exam, offered, accepted, enrolled) from a live admissions board with a funnel, form fees collected, places per class, exam results by subject against a pass mark, and an activity feed that refreshes every 15 seconds. Enrolling creates the student, links or creates the parent by phone, and sets a portal PIN.
+- **Email follow-ups**: admissions emails go through an email outbox with send-after times, sent by the shared email provider (Brevo or Resend, or logged without a key). The family hears at each step (form started, received, exam invitation, offer, decision, welcome with admission number and PIN), and scheduled nudges go out on their own: unpaid form fee after 1 and 3 days, exam reminder the day before, a last call 3 hours before the exam closes, and offer reminders after 3 and 7 days. Each nudge is cancelled, or skipped at send time, once the family has moved on. The admissions office gets an email for every new application, and key steps also go by SMS.
 - **Tenant isolation**: every school's data is separated by Postgres row-level security, tested end to end. The API switches to a restricted `school_app` role inside each school's transaction, so isolation holds even if it connects as a superuser. The role that runs migrations needs `CREATEROLE` (or superuser) the first time, to create `school_app`.
 
 - **Web app** with five portals, all reading and writing the real API and database:
@@ -65,7 +67,7 @@ Build `packages/core` first if the API complains it cannot find it: `pnpm --filt
 
 ### Demo logins
 
-The seed builds a GCIS-style school (`gcis-demo`): nursery to SS 3, 48 students, two terms of published results, a current term with CAs entered, four weeks of registers, fee bills with payments, a WAEC question bank, CBT tests and parent messages. It also adds a small second school (`bright-future-demo`). Running it again deletes and rebuilds both demo schools only.
+The seed builds a GCIS-style school (`gcis-demo`): nursery to SS 3, 48 students, two terms of published results, a current term with CAs entered, four weeks of registers, fee bills with payments, a WAEC question bank, CBT tests and parent messages. Its public website is at `/s/gcis-demo`, with admissions open for JSS 1 (30-minute CBT entrance exam) and Primary 1, and 14 applicant families at every stage. It also adds a small second school (`bright-future-demo`). Running it again deletes and rebuilds both demo schools only.
 
 | Portal | Sign in with |
 | --- | --- |
@@ -86,7 +88,7 @@ pnpm test
 
 ## API overview
 
-All routes are under `/api` and need `Authorization: Bearer <token>` except sign-up, login and health.
+All routes are under `/api` and need `Authorization: Bearer <token>` except sign-up, login, health and `/public/...`.
 
 | Method | Path | Who |
 | --- | --- | --- |
@@ -135,6 +137,11 @@ All routes are under `/api` and need `Authorization: Bearer <token>` except sign
 | GET, PUT, POST | `/student/exams`, `/student/exams/goal`, `/student/exams/topics`, `/student/exams/plan`, `/student/exams/mock` | student |
 | GET, POST, PUT, PATCH, DELETE | `/assistant/context`, `/assistant/lesson`, `/assistant/assessment`, `/assistant/save`, `/assistant/essays[/:id[/scripts/:studentId, /push-scores]]`, `/assistant/remarks`, `/assistant/watchlist` | staff who teach the class and subject; leadership |
 | GET | `/ai/overview`, `/ai/flags/:conversationId` | leadership |
+| GET, PUT | `/admissions/site` (website content and admission settings) | leadership |
+| GET, POST, DELETE | `/admissions/classes`, `/admissions/entrance-exams` | leadership |
+| GET | `/admissions/overview`, `/admissions/applications[/:id]` | leadership |
+| POST | `/admissions/schedule-exam`, `/admissions/applications/:id/mark-paid`, `/offer`, `/reject`, `/enrol`, `/message`, `/notes`, `/admissions/emails/dispatch` | leadership |
+| GET, POST, PUT | `/public/schools/:slug`, `/public/schools/:slug/applications[/:ref[/pay, /accept, /exam, /exam/start, /exam/answers, /exam/submit]]`, `/public/schools/:slug/payments/:reference/verify` | anyone; application routes need the private `key` from the family's link |
 | PATCH | `/platform/schools/:id/ai` (monthly AI allowance, daily student limit) | platform super admin |
 | POST | `/platform/auth/login` | anyone |
 | GET | `/platform/me`, `/platform/schools`, `/platform/admins` | platform super admin |
@@ -147,11 +154,12 @@ Copy `apps/api/.env.example`. Everything runs without keys: messages are logged 
 
 - **Paystack**: put a test secret key (`sk_test_...`) in `PAYSTACK_SECRET_KEY` and set the webhook URL in the Paystack dashboard to `<api>/api/webhooks/paystack`. Each school connects its bank account once (`POST /fees/paystack/subaccount`), so fees settle straight to the school.
 - **Termii**: `TERMII_API_KEY`, an approved `TERMII_SENDER_ID`, and your account's `TERMII_BASE_URL`. WhatsApp needs a WhatsApp sender set up in Termii.
+- **Email**: the shared email provider (`src/messaging/email.provider.ts`, also used by fee recovery): `BREVO_API_KEY` or `RESEND_API_KEY`, plus `EMAIL_FROM` on a verified sender domain. `EMAIL_SANDBOX_TO` sends every email to one address while you try real keys. Emails go out under each school's name with replies to the school. Without a key they are logged.
 - **Claude**: `ANTHROPIC_API_KEY`. Every AI call is logged in `ai_usage` (tokens and cost per school, student and feature), limited per student per day and by each school's monthly allowance. `AI_TUTOR_MODEL` picks a different model for the tutor chat. `KB_MAX_UPLOAD_MB` caps knowledge base uploads (15 MB), and `USD_NGN_RATE` converts the AI allowance to naira on screen.
 
 ## Next
 
 1. Printing a whole class's report cards at once.
-2. Timetable (the screens show "coming next") and admissions.
+2. Timetable (the screens show "coming next").
 4. Charging schools from the super admin billing page, and a shared question bank across schools.
 3. Offline CBT for exam halls with poor internet.

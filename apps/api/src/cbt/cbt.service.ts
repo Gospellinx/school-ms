@@ -40,6 +40,8 @@ export interface TestInput {
   shuffleQuestions: boolean;
   showResults: boolean;
   scoreComponent?: string;
+  /** 'entrance' tests are admissions exams: no classes, questions may span subjects, sat by applicants. */
+  purpose?: 'class' | 'entrance';
 }
 
 @Injectable()
@@ -50,6 +52,8 @@ export class CbtService {
 
   private async assertTeaches(tx: Tx, user: Principal, subjectId: string, classIds: string[]) {
     if (user.role !== 'teacher') return;
+    // Entrance exams have no classes, so only leadership manages them.
+    if (classIds.length === 0) throw new ForbiddenException('Only school leadership can manage entrance exams');
     const links = await tx
       .select({ classId: classSubjects.classId })
       .from(classSubjects)
@@ -59,6 +63,10 @@ export class CbtService {
 
   createTest(user: Principal, input: TestInput) {
     if (input.opensAt && input.closesAt && input.opensAt >= input.closesAt) throw new BadRequestException('The test must open before it closes');
+    const entrance = input.purpose === 'entrance';
+    if (entrance && user.role === 'teacher') throw new ForbiddenException('Only school leadership can set entrance exams');
+    if (entrance && (input.classIds.length || input.scoreComponent)) throw new BadRequestException('Entrance exams are not set for classes or score sheets');
+    if (!entrance && input.classIds.length === 0) throw new BadRequestException('Choose at least one class');
     return this.dbs.withSchool(user.schoolId, async (tx) => {
       await assertOwned(tx, subjects, input.subjectId, 'Subject');
       if (input.termId) await assertOwned(tx, terms, input.termId, 'Term');
@@ -80,7 +88,8 @@ export class CbtService {
       const qIds = [...new Set(input.questionIds)];
       const qs = qIds.length ? await tx.select().from(questions).where(inArray(questions.id, qIds)) : [];
       if (qs.length !== qIds.length) throw new NotFoundException('Question not found');
-      if (qs.some((q) => q.subjectId !== input.subjectId)) throw new BadRequestException('Every question must be for the test subject');
+      // An entrance exam usually mixes subjects (e.g. English and Mathematics); a class test has one.
+      if (!entrance && qs.some((q) => q.subjectId !== input.subjectId)) throw new BadRequestException('Every question must be for the test subject');
 
       const [test] = await tx
         .insert(cbtTests)
@@ -95,10 +104,11 @@ export class CbtService {
           shuffleQuestions: input.shuffleQuestions,
           showResults: input.showResults,
           scoreComponent: input.scoreComponent,
+          purpose: input.purpose ?? 'class',
           createdBy: user.staffId,
         })
         .returning();
-      await tx.insert(cbtTestClasses).values(classIds.map((classId) => ({ schoolId: user.schoolId, testId: test.id, classId })));
+      if (classIds.length) await tx.insert(cbtTestClasses).values(classIds.map((classId) => ({ schoolId: user.schoolId, testId: test.id, classId })));
       if (qIds.length) {
         await tx.insert(cbtTestQuestions).values(
           qIds.map((questionId, position) => ({
@@ -137,7 +147,13 @@ export class CbtService {
   }
 
   listTests(user: Principal) {
-    return this.dbs.withSchool(user.schoolId, (tx) => tx.select().from(cbtTests).orderBy(desc(cbtTests.createdAt)));
+    return this.dbs.withSchool(user.schoolId, (tx) =>
+      tx
+        .select()
+        .from(cbtTests)
+        .where(user.role === 'teacher' ? eq(cbtTests.purpose, 'class') : undefined)
+        .orderBy(desc(cbtTests.createdAt)),
+    );
   }
 
   getTest(user: Principal, testId: string) {
