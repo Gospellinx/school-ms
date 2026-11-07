@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { BellRing, FileStack, Plus, Search, Trash2 } from "lucide-react";
+import { BellRing, CalendarClock, Copy, FileStack, Plus, Search, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shell/page-header";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import { Wallet } from "lucide-react";
 import { api, useApi } from "@/lib/api";
 import { TermSelect, useTerms } from "@/lib/terms";
 import { useAction } from "@/lib/useAction";
-import { dateTime, INVOICE_STATUS, naira, pct } from "@/lib/format";
+import { dateTime, INVOICE_STATUS, naira, pct, shortDate, todayLagos } from "@/lib/format";
 import { className, type FeeItem, type FeeSummary, type Invoice, type InvoiceDetail, type SchoolClass, type Section } from "@/lib/types";
 
 export default function Fees() {
@@ -302,10 +302,66 @@ function InvoiceDialog({ id, onClose, onPaid }: { id: string; onClose: () => voi
                   <Button disabled={a.busy}>Record payment</Button>
                 </form>
               ) : <SuccessNote>Fully paid.</SuccessNote>}
+              {d.balanceKobo > 0 ? <PlanBox invoice={d} onChanged={() => { void inv.reload(); onPaid(); }} /> : null}
             </div>
           </div>
         )}
       </Async>
     </Dialog>
+  );
+}
+
+/** Agree to take the balance in instalments, and copy the pay link the reminders use. */
+function PlanBox({ invoice, onChanged }: { invoice: InvoiceDetail; onChanged: () => void }) {
+  const a = useAction();
+  const plan = invoice.plan;
+  async function create(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const r = await a.run(
+      () => api(`invoices/${invoice.id}/plan`, { method: "PUT", body: { count: Number(f.get("count")), firstDueOn: String(f.get("first")), everyDays: Number(f.get("every")), note: String(f.get("note") || "") || undefined } }),
+      "Plan saved. The parent has been sent the dates and a pay link.",
+    );
+    if (r) onChanged();
+  }
+  return (
+    <div className="mt-5 rounded-2xl border border-line p-4">
+      <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold"><CalendarClock className="h-4 w-4" /> Payment plan</p>
+      <ErrorNote className="mb-2">{a.error}</ErrorNote>
+      <SuccessNote className="mb-2">{a.notice}</SuccessNote>
+      {plan ? (
+        <>
+          <ul className="mb-3 grid gap-1.5 text-sm">
+            {plan.schedule.map((i, n) => (
+              <li key={i.dueOn} className="flex justify-between"><span>{n + 1}. by {shortDate(i.dueOn)}</span><span className="font-semibold">{naira(i.amountKobo)}</span></li>
+            ))}
+          </ul>
+          <p className="mb-3 text-xs">
+            {plan.progress.onTrack ? <span className="text-emerald-700">On track.</span> : <span className="text-rose-600">{naira(plan.progress.behindKobo)} behind.</span>}{" "}
+            {plan.progress.next ? `Next: ${naira(plan.progress.next.outstandingKobo)} by ${shortDate(plan.progress.next.dueOn)}.` : ""}
+          </p>
+          <Button size="sm" variant="ghost" disabled={a.busy} onClick={() => a.run(async () => { await api(`invoices/${invoice.id}/plan`, { method: "DELETE" }); onChanged(); }, "Plan cancelled. Reminders follow the term due date again.")}>
+            <Trash2 className="h-4 w-4" /> Cancel plan
+          </Button>
+        </>
+      ) : (
+        <form className="grid gap-3 sm:grid-cols-3" onSubmit={create}>
+          <div><Label>Instalments</Label><Select name="count" className="w-full" defaultValue="3">{[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}</Select></div>
+          <div><Label>First due</Label><Input name="first" type="date" required defaultValue={todayLagos()} /></div>
+          <div><Label>Every</Label><Select name="every" className="w-full" defaultValue="30"><option value="14">2 weeks</option><option value="30">month</option></Select></div>
+          <div className="sm:col-span-3"><Input name="note" placeholder="Note (optional), e.g. agreed with Mr Adeyemi on the phone" /></div>
+          <Button size="sm" className="sm:col-span-3" disabled={a.busy}>Agree plan for {naira(invoice.balanceKobo)}</Button>
+        </form>
+      )}
+      <Button
+        size="sm"
+        variant="outline"
+        className="mt-3 w-full"
+        disabled={a.busy}
+        onClick={() => a.run(async () => { const r = await api<{ url: string }>(`invoices/${invoice.id}/pay-link`, { method: "POST" }); await navigator.clipboard?.writeText(r.url).catch(() => undefined); return r; }, (r) => `Pay link copied: ${r.url}`)}
+      >
+        <Copy className="h-4 w-4" /> Copy pay link for the parent
+      </Button>
+    </div>
   );
 }

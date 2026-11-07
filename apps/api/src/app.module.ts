@@ -46,6 +46,10 @@ import { InsightsController, ParentForecastController } from './insights/insight
 import { InsightsService } from './insights/insights.service';
 import { LiveController } from './live/live.controller';
 import { LiveService } from './live/live.service';
+import { AutomationsService } from './autopilot/automations.service';
+import { AutopilotController } from './autopilot/autopilot.controller';
+import { PayLinksController } from './autopilot/pay-links.controller';
+import { EmailProvider, emailProviderFactory } from './messaging/email.provider';
 
 @Module({
   imports: [DbModule, AuthModule],
@@ -75,6 +79,8 @@ import { LiveService } from './live/live.service';
     InsightsController,
     ParentForecastController,
     LiveController,
+    AutopilotController,
+    PayLinksController,
   ],
   providers: [
     ResultsService,
@@ -83,6 +89,7 @@ import { LiveService } from './live/live.service';
     FeesService,
     PaystackClient,
     { provide: MessagingProvider, useFactory: messagingProviderFactory },
+    { provide: EmailProvider, useFactory: emailProviderFactory },
     NotificationsService,
     PortalAuthService,
     CbtService,
@@ -97,6 +104,7 @@ import { LiveService } from './live/live.service';
     LessonBookService,
     InsightsService,
     LiveService,
+    AutomationsService,
   ],
 })
 export class AppModule {}

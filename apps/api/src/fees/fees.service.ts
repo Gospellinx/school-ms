@@ -22,6 +22,7 @@ import {
   terms,
 } from '../db/schema';
 import { NotificationsService } from '../messaging/notifications.service';
+import { planFor } from '../autopilot/plans';
 import { PaystackClient, PaystackTransaction } from './paystack.client';
 
 export interface FeeItemInput {
@@ -198,6 +199,7 @@ export class FeesService {
       student: { id: row.student.id, name: `${row.student.lastName} ${row.student.firstName}`, admissionNumber: row.student.admissionNumber },
       lines,
       payments: paid,
+      plan: await planFor(tx, invoiceId, row.invoice.paidKobo),
     };
   }
 
@@ -281,6 +283,7 @@ export class FeesService {
       (s) =>
         `Payment of ${formatNaira(amountKobo)} received for ${s.firstName} ${s.lastName} (${invoice.number}). ` +
         (balance > 0 ? `Balance: ${formatNaira(balance)}.` : 'Fees fully paid. Thank you.'),
+      { emailSubject: `Payment received: ${formatNaira(amountKobo)}` },
     );
   }
 
@@ -315,7 +318,7 @@ export class FeesService {
    * Starts a Paystack checkout for all or part of a bill. Returns the URL to send the
    * payer to. Money settles into the school's Paystack subaccount when one is set up.
    */
-  startPaystack(schoolId: string, invoiceId: string, opts: { amountKobo?: number; email?: string; guardianId?: string }) {
+  startPaystack(schoolId: string, invoiceId: string, opts: { amountKobo?: number; email?: string; guardianId?: string; callbackUrl?: string }) {
     return this.dbs.withSchool(schoolId, async (tx) => {
       const detail = await this.invoiceDetail(tx, invoiceId);
       const balance = detail.totalKobo - detail.paidKobo;
@@ -341,7 +344,7 @@ export class FeesService {
         email,
         amountKobo,
         reference,
-        callbackUrl: config.paystack().callbackUrl,
+        callbackUrl: opts.callbackUrl ?? config.paystack().callbackUrl,
         subaccount: school.paystackSubaccountCode ?? undefined,
         bearer: config.paystack().feeBearer,
         metadata: {
@@ -436,6 +439,7 @@ export class FeesService {
         (s) =>
           `Dear parent, ${s.firstName} ${s.lastName}'s ${term.name} fees balance is ${formatNaira(balances.get(s.id)!)}. ` +
           `Pay online at ${config.portalUrl()} or at the school bursary.`,
+        { emailSubject: `${term.name} fees reminder` },
       );
       return { studentsOwing: balances.size, messagesQueued: queued };
     });

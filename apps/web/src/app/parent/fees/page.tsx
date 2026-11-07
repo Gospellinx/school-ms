@@ -10,7 +10,7 @@ import { StatusBadge } from "@/components/widgets/status-badge";
 import { Async, Empty, ErrorNote, Loading } from "@/components/ui/feedback";
 import { api, ApiError, useApi } from "@/lib/api";
 import { ChildPicker, childClass, childName, useChild } from "@/lib/child";
-import { dateTime, INVOICE_STATUS, naira } from "@/lib/format";
+import { dateTime, INVOICE_STATUS, naira, shortDate } from "@/lib/format";
 import type { InvoiceDetail } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -20,7 +20,9 @@ function PayBox({ invoice }: { invoice: InvoiceDetail }) {
   const [amount, setAmount] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const part = amount.trim() ? Math.round(Number(amount) * 100) : null;
+  const p = invoice.plan?.progress;
+  const due = p ? (p.behindKobo > 0 ? p.behindKobo : (p.next?.outstandingKobo ?? invoice.balanceKobo)) : invoice.balanceKobo;
+  const part = amount.trim() ? Math.round(Number(amount) * 100) : due < invoice.balanceKobo ? due : null;
   const toPay = part ?? invoice.balanceKobo;
 
   async function pay() {
@@ -85,6 +87,14 @@ function Fees() {
                     <li className="flex justify-between py-3 text-emerald-600"><span>Paid</span><span>− {naira(inv.paidKobo)}</span></li>
                     <li className="flex justify-between py-3 text-lg font-bold"><span>Balance</span><span>{naira(inv.balanceKobo)}</span></li>
                   </ul>
+                  {inv.plan ? (
+                    <div className="mt-5 rounded-2xl bg-brand-50 p-4 text-sm">
+                      <p className="mb-2 font-semibold">Your payment plan {inv.plan.progress.onTrack ? <span className="font-normal text-emerald-700">· on track</span> : <span className="font-normal text-rose-600">· {naira(inv.plan.progress.behindKobo)} behind</span>}</p>
+                      <ul className="grid gap-1">
+                        {inv.plan.schedule.map((i, n) => <li key={i.dueOn} className="flex justify-between"><span>{n + 1}. by {shortDate(i.dueOn)}</span><span className="font-semibold">{naira(i.amountKobo)}</span></li>)}
+                      </ul>
+                    </div>
+                  ) : null}
                   <h4 className="mt-6 mb-3 font-semibold">Payment history</h4>
                   {inv.payments.length ? (
                     <ul className="flex flex-col gap-2">
