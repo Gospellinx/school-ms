@@ -368,7 +368,7 @@ export class TeachingService {
   }
 
   /** Saves a draft (lesson note, plan, marking scheme or test) into the knowledge base as Markdown. */
-  save(user: Principal, input: { classId: string; subjectId: string; kind: 'lesson_note' | 'lesson_plan' | 'marking_scheme' | 'past_questions'; title: string; body: string; visibleToStudents?: boolean }) {
+  save(user: Principal, input: { classId: string; subjectId: string; kind: 'lesson_note' | 'lesson_plan' | 'marking_scheme' | 'past_questions'; title: string; body: string; visibleToStudents?: boolean; week?: number | null }) {
     return this.dbs
       .withSchool(user.schoolId, (tx) => this.classSubject(tx, user, input.classId, input.subjectId))
       .then((c) =>
@@ -380,6 +380,7 @@ export class TeachingService {
             subjectId: input.subjectId,
             classLevel: c.classLevel,
             termNumber: c.term?.number ?? null,
+            week: input.week ?? null,
             // Plans, marking schemes and tests stay with staff; lesson notes are for students too.
             visibleToStudents: input.visibleToStudents ?? input.kind === 'lesson_note',
             fileName: `${slug(input.title)}.md`,

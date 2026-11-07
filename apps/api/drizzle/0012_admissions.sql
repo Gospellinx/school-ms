@@ -143,7 +143,6 @@ CREATE UNIQUE INDEX "application_school_reference" ON "applications" USING btree
 CREATE INDEX "applications_status" ON "applications" USING btree ("school_id","status","created_at");--> statement-breakpoint
 CREATE INDEX "email_outbox_due" ON "email_outbox" USING btree ("status","send_after");--> statement-breakpoint
 CREATE INDEX "email_outbox_application" ON "email_outbox" USING btree ("application_id");--> statement-breakpoint
-
 -- Tenant isolation for the website and admissions tables (same policy as 0001).
 ALTER TABLE "school_sites" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "school_sites" FORCE ROW LEVEL SECURITY;--> statement-breakpoint

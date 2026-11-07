@@ -4,7 +4,10 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { Async, Empty, ErrorNote, SuccessNote } from "@/components/ui/feedback";
-import { api, useApi } from "@/lib/api";
+import { useApi } from "@/lib/api";
+import { pendingFor, sendOrQueue } from "@/lib/offline";
+import { Camera } from "lucide-react";
+import { SnapScores } from "./snap-scores";
 import { TermSelect, useTerms } from "@/lib/terms";
 import { useAction } from "@/lib/useAction";
 import { className, type Assignment, type GradeBand, type SchoolClass, type ScoreSheet as Sheet, type Section } from "@/lib/types";
@@ -29,18 +32,41 @@ export function ScoreSheet({ initial }: { initial?: { classId?: string; subjectI
     setPick(`${want.classId}:${want.subjectId}`);
   }, [assignments, pick, initial]);
   const [classId, subjectId] = pick.split(":");
-  const sheet = useApi<Sheet>(termId && classId && subjectId ? `terms/${termId}/classes/${classId}/subjects/${subjectId}/scores` : null);
+  const path = termId && classId && subjectId ? `terms/${termId}/classes/${classId}/subjects/${subjectId}/scores` : null;
+  const sheet = useApi<Sheet>(path);
   const [draft, setDraft] = React.useState<Draft>({});
   const [dirty, setDirty] = React.useState(false);
+  const [waiting, setWaiting] = React.useState(false);
+  const [snapOpen, setSnapOpen] = React.useState(false);
+  const [fromPhoto, setFromPhoto] = React.useState<Set<string>>(new Set());
   const a = useAction();
 
   React.useEffect(() => {
-    if (!sheet.data) return;
-    setDraft(Object.fromEntries(sheet.data.rows.map((r) => [r.studentId, Object.fromEntries(Object.entries(r.scores ?? {}).map(([k, v]) => [k, String(v)]))])));
+    if (!sheet.data || !path) return;
+    let live = true;
+    const saved: Draft = Object.fromEntries(sheet.data.rows.map((r) => [r.studentId, Object.fromEntries(Object.entries(r.scores ?? {}).map(([k, v]) => [k, String(v)]))]));
+    setDraft(saved);
     setDirty(false);
-  }, [sheet.data]);
+    setFromPhoto(new Set());
+    // Scores saved on this phone while offline are newer than the copy from the server: show those.
+    void pendingFor(path)
+      .catch(() => undefined)
+      .then((p) => {
+        if (!live) return;
+        setWaiting(Boolean(p));
+        if (!p) return;
+        const body = p.body as { entries: { studentId: string; scores: Record<string, number> }[] };
+        const next = { ...saved };
+        for (const e of body.entries) next[e.studentId] = Object.fromEntries(Object.entries(e.scores).map(([k, v]) => [k, String(v)]));
+        setDraft(next);
+      });
+    return () => {
+      live = false;
+    };
+  }, [sheet.data, path]);
 
   const cls = classes?.find((c) => c.id === classId);
+  const assignment = assignments?.find((x) => x.classId === classId && x.subjectId === subjectId);
   const scale = sections?.find((s) => s.id === cls?.sectionId)?.gradingScale ?? [];
 
   const problems: string[] = [];
@@ -73,10 +99,17 @@ export function ScoreSheet({ initial }: { initial?: { classId?: string; subjectI
           return { studentId: r.studentId, scores };
         })
         .filter((e) => Object.keys(e.scores).length > 0);
-      const r = await api<{ saved: number }>(`terms/${termId}/classes/${classId}/subjects/${subjectId}/scores`, { method: "PUT", body: { entries } });
+      const label = `${assignment ? `${className({ name: assignment.className, arm: assignment.arm })} ${assignment.subjectName}` : "Score sheet"} scores`;
+      const r = await sendOrQueue<{ saved: number }>(path!, { method: "PUT", body: { entries }, label });
+      if (r.queued) {
+        setDirty(false);
+        setWaiting(true);
+        return { saved: entries.length, queued: true };
+      }
+      setWaiting(false);
       await sheet.reload();
-      return r;
-    }, (r) => `Saved scores for ${r.saved} students.`);
+      return { saved: r.data.saved, queued: false };
+    }, (r) => (r.queued ? `No connection. Scores for ${r.saved} students are saved on this phone and will sync when you are back online.` : `Saved scores for ${r.saved} students.`));
 
   const cell = "h-10 w-16 rounded-xl border bg-white text-center font-semibold outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-100";
 
@@ -92,6 +125,11 @@ export function ScoreSheet({ initial }: { initial?: { classId?: string; subjectI
           ))}
         </Select>
         <TermSelect sessions={sessions} value={termId} onChange={setTermId} />
+        {sheet.data?.rows.length ? (
+          <Button variant="secondary" onClick={() => setSnapOpen(true)}>
+            <Camera className="h-4 w-4" /> Snap score sheet
+          </Button>
+        ) : null}
         <span className="ml-auto text-sm text-muted">Class average <strong className="text-ink">{avg === null ? "–" : avg.toFixed(1)}</strong></span>
       </div>
       <Async data={sheet.data} error={sheet.error}>
@@ -123,7 +161,7 @@ export function ScoreSheet({ initial }: { initial?: { classId?: string; subjectI
                             <td key={c.key} className="px-2 text-center">
                               <input
                                 inputMode="decimal"
-                                className={cn(cell, bad ? "border-rose-400 bg-rose-50" : "border-line")}
+                                className={cn(cell, bad ? "border-rose-400 bg-rose-50" : fromPhoto.has(r.studentId) ? "border-brand-300 bg-brand-50" : "border-line")}
                                 value={v}
                                 onChange={(e) => {
                                   setDirty(true);
@@ -149,13 +187,35 @@ export function ScoreSheet({ initial }: { initial?: { classId?: string; subjectI
       </Async>
       <div className="mt-4 flex flex-col gap-2">
         {problems.length ? <ErrorNote>{problems[0]}{problems.length > 1 ? ` (and ${problems.length - 1} more)` : ""}</ErrorNote> : null}
+        {waiting && !dirty ? <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">These scores are saved on this phone and have not reached the school yet. They sync when you are back online.</p> : null}
+        {fromPhoto.size ? <p className="rounded-xl bg-brand-50 px-3 py-2 text-sm text-brand-800">{fromPhoto.size} students filled from your photo (shaded). Check them, then press Save scores.</p> : null}
         <ErrorNote>{a.error}</ErrorNote>
         <SuccessNote>{a.notice}</SuccessNote>
         <div className="flex flex-col-reverse items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-muted">Leave a box empty if that score is not in yet. Parents only see results after the admin publishes them.</p>
-          <Button disabled={a.busy || problems.length > 0 || !dirty} onClick={save}>{a.busy ? "Saving…" : dirty ? "Save scores" : "Saved"}</Button>
+          <Button disabled={a.busy || problems.length > 0 || !dirty} onClick={save}>{a.busy ? "Saving…" : dirty ? "Save scores" : waiting ? "Saved on this phone" : "Saved"}</Button>
         </div>
       </div>
+      {path && sheet.data ? (
+        <SnapScores
+          open={snapOpen}
+          onClose={() => setSnapOpen(false)}
+          path={path}
+          rows={sheet.data.rows}
+          components={sheet.data.components}
+          current={draft}
+          onApply={(cells) => {
+            setDraft((d) => {
+              const next = { ...d };
+              for (const [id, vals] of Object.entries(cells)) next[id] = { ...d[id], ...Object.fromEntries(Object.entries(vals).filter(([, v]) => v.trim() !== "")) };
+              return next;
+            });
+            setFromPhoto(new Set(Object.keys(cells)));
+            setDirty(true);
+            a.setNotice(null);
+          }}
+        />
+      ) : null}
     </Card>
   );
 }

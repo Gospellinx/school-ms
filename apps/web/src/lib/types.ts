@@ -709,3 +709,75 @@ export interface Watchlist {
     reasons: { code: string; serious: boolean; text: string }[];
   }[];
 }
+
+// ---------------------------------------------------------------- Snap-to-score
+
+export interface SnapMatch {
+  studentId: string;
+  line: number;
+  nameAsWritten: string;
+  confidence: "high" | "medium" | "low";
+  scores: Record<string, number>;
+  /** Component keys to check against the photo. */
+  check: string[];
+  issues: string[];
+}
+
+export interface SnapReading {
+  components: Component[];
+  matches: SnapMatch[];
+  unmatched: { line: number; name: string; admissionNumber?: string | null; scores: Record<string, number | null>; unclear?: string[] }[];
+  missing: string[];
+  notes: string | null;
+}
+
+// ---------------------------------------------------------------- Lesson notes book
+
+export interface LessonBookEntry {
+  id: string;
+  kind: "lesson_note" | "lesson_plan";
+  title: string;
+  week: number | null;
+  createdAt: string;
+  author: string | null;
+  mine: boolean;
+  vetted: { by: string | null; at: string; comment: string | null } | null;
+  body: string | null;
+  format: "markdown" | "text";
+}
+
+export interface LessonBook {
+  school: { name: string; address: string | null; motto: string | null; phone: string | null; email: string | null };
+  class: { id: string; name: string; arm: string | null; section: string | null };
+  subject: { id: string; name: string };
+  teacher: string | null;
+  term: { id: string; name: string; number: number; session: string; startsOn: string | null; endsOn: string | null } | null;
+  currentWeek: number | null;
+  canVet: boolean;
+  entries: LessonBookEntry[];
+  coverage: {
+    rows: { week: number; topic: string; noteId: string | null; planId: string | null; vetted: boolean }[];
+    extra: string[];
+    missingWeeks: number[];
+    percent: number;
+  };
+}
+
+export interface LessonBookOverview {
+  term: { id: string; name: string; number: number; session: string } | null;
+  currentWeek: number | null;
+  rows: {
+    classId: string;
+    className: string;
+    arm: string | null;
+    subjectId: string;
+    subjectName: string;
+    teacher: string | null;
+    weeks: number;
+    notes: number;
+    plans: number;
+    awaitingVetting: number;
+    missingWeeks: number[];
+    percent: number | null;
+  }[];
+}

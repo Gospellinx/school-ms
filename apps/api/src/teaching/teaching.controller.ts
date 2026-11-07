@@ -29,6 +29,7 @@ const saveSchema = contextQuery.extend({
   title: z.string().trim().min(2).max(200),
   body: z.string().min(10).max(200_000),
   visibleToStudents: z.boolean().optional(),
+  week: z.number().int().min(1).max(16).nullish(),
 });
 
 const rubricPoint = z.object({ point: z.string().trim().min(1).max(500), marks: z.number().positive().max(100) });
